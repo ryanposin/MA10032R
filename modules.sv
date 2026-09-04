@@ -36,7 +36,7 @@ always registers[0] = 0;
 		end
 endmodule
 
-//74'181 ALU implementation, s[4] = M from original chip, s[3:0] are normal
+//Trimmed 74'181 ALU implementation, s[4] = M from original chip, s[3:0] are normal
 //select lines, cin active high, cout active high 
 module alumod (input wire[3:0] s, input wire m, input wire cin, input wire[31:0] a, input wire[31:0] b, output logic[31:0] dout, output logic cout);
 
@@ -62,14 +62,33 @@ module alumod (input wire[3:0] s, input wire m, input wire cin, input wire[31:0]
 					4'b0100:	begin dout = ~(a & b); cout = 0; end
 					4'b0101:	begin dout = ~b; cout = 0; end
 					4'b0110:	begin dout = a ^ b; cout = 0; end
-					4'b1001:	begin dout = ~(a ^ b); cout = 0; end
-					4'b1010:	begin dout = b; cout = 0; end
-					4'b1011:	begin dout = a & b; cout = 0; end
-					4'b1100:	begin dout = 1; cout = 0; end
-					4'b1110:	begin dout = a | b; cout = 0; end
-					4'b1111:	begin dout = a; cout = 0; end
+					4'b0111:	begin dout = ~(a ^ b); cout = 0; end
+					4'b1000:	begin dout = b; cout = 0; end
+					4'b1001:	begin dout = a & b; cout = 0; end
+					4'b1010:	begin dout = 1; cout = 0; end
+					4'b1011:	begin dout = a | b; cout = 0; end
+					4'b1100:	begin dout = a; cout = 0; end
 					default:	begin dout = 0; cout = 0; end
 				endcase
 		endcase
 
+endmodule
+
+module ma10k_frontend (input wire[31:0] ins, output logic[3:0] portasel, output logic[3:0] portbsel, output logic[3:0] writesel, output logic we, output logic alu_mode, output logic alu_function, output logic[15:0] immediate);
+	logic[6:0] microcode[60];
+	logic itype;
+	logic btype;
+	initial begin
+			$readmemh("microcode.txt", microcode);
+		end
+	always_comb
+		begin
+
+			portasel = ins[7:4];
+			portbsel = ins[3:0];
+			writesel = ins[11:8];
+			if (itype) immediate = {ins[31:20],ins[3:0]}; 
+			else if (btype) immediate = {ins[31:20],ins[11:8]};
+			else immediate = 0;
+		end
 endmodule
