@@ -36,8 +36,8 @@ always registers[0] = 0;
 		end
 endmodule
 
-//Trimmed 74'181 ALU implementation, s[4] = M from original chip, s[3:0] are normal
-//select lines, cin active high, cout active high 
+//Trimmed 74'181 ALU implementation
+//cin active high, cout active high 
 module alumod (input wire[3:0] s, input wire m, input wire cin, input wire[31:0] a, input wire[31:0] b, output logic[31:0] dout, output logic cout);
 
 	always_comb
@@ -72,6 +72,60 @@ module alumod (input wire[3:0] s, input wire m, input wire cin, input wire[31:0]
 				endcase
 		endcase
 
+endmodule
+
+module multiplier_unit (input wire clk, input wire[31:0] a, input wire[31:0] b, input wire templatch, input wire outlatch, input wire[1:0] muxas, input wire[1:0] muxbs, input wire[1:0] demuxs, input wire endmux, input wire accumulate, output logic[31:0] multout);
+	
+	logic[31:0] ffa;
+	logic[31:0] ffb;
+	logic[7:0] multina;
+	logic[7:0] multinb;
+	logic[15:0] multtempout;
+	logic[31:0] demux;
+	logic[7:0] carrybuf;
+	logic[31:0] productreg;
+	logic carry;
+
+	//Input flip flop latch
+	always_ff @(posedge templatch)
+			begin
+				ffa <= a;
+				ffb <= b;
+			end
+	//8x8 multiplier input MUXes 
+	always_comb
+		begin
+			//00 - 7:0
+			//01 - 15:8
+			//10 - 23:16
+			//11 - 31:24
+			multina = muxas[1] ? (muxas[0] ? ffa[31:24] : ffa[23:16]) : (muxas[0] ? ffa[15:8] : ffa[7:0]);   
+			multinb = muxbs[1] ? (muxbs[0] ? ffb[31:24] : ffb[23:16]) : (muxbs[0] ? ffb[15:8] : ffb[7:0]); 
+		end
+
+	always_comb multtempout = multina * multinb; //Multiply
+	
+	//Demux multiplier to 32 bit register
+	always_comb
+		case (demuxs)
+			2'b00: demux = {16'b0, multtempout};
+			2'b01: demux = {8'b0, multtempout, 8'b0};
+			2'b10: demux = {multtempout, 16'b0};
+			2'b11: demux = {multtempout[7:0], 24'b0};
+		endcase
+	
+	//Carry for 64 bit product
+	always_latch
+		if (demuxs == 2'b11)
+				carrybuf = multtempout[15:8];
+	
+	//Accumulate
+	always_ff @(negedge clk)
+		begin
+			if (accumulate)
+				{carry,productreg} <= endmux ? (productreg + demux) : ({24'b0, carrybuf} + demux + carry);
+		end
+	
 endmodule
 
 module ma10k_frontend (input wire[31:0] ins, output logic[3:0] portasel, output logic[3:0] portbsel, output logic[3:0] writesel, output logic we, output logic alu_mode, output logic alu_function, output logic[15:0] immediate);
