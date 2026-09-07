@@ -38,7 +38,7 @@ endmodule
 
 //Trimmed 74'181 ALU implementation
 //cin active high, cout active high 
-module alumod (input wire[3:0] s, input wire m, input wire cin, input wire[31:0] a, input wire[31:0] b, output logic[31:0] dout, output logic cout);
+module alumod (input wire[3:0] s, input wire m, input wire cin, input wire[31:0] a, input wire[31:0] b, input wire[3:0] shiftamt, output logic[31:0] dout, output logic cout);
 
 	always_comb
 		case (m)
@@ -46,29 +46,60 @@ module alumod (input wire[3:0] s, input wire m, input wire cin, input wire[31:0]
 				case (s)
 					//Arithmetic
 					4'b0000:	{cout,dout} = a + cin;
-					4'b0001:	{cout,dout} = ({a,cin} << 1); 	
-					4'b0010:	{dout,cout} = ({cin,a} >> 1);
-					4'b0011:	begin dout = a << 1; cout = 0; end
-					4'b0100:	begin dout = a >> 1; cout = 0; end
-					4'b0101:	{cout,dout} = a + b + cin;
-					default:	begin dout = 0; cout = 0; end
+					4'b0001:	case (shiftamt) //Shift left w/o carry
+								0: {cout,dout} = {1'b0, a << 1};
+								1: {cout,dout} = {1'b0, a << 2};
+								3: {cout,dout} = {1'b0, a << 4};
+								7: {cout,dout} = {1'b0, a << 8};
+								15: {cout,dout} = {1'b0, a << 16};
+								default: {cout,dout} = {1'b0,32'b0};
+							endcase
+
+					4'b0010:	case (shiftamt) //Shift right w/o carry
+								0: {dout,cout} = {a >> 1,1'b0};
+								1: {dout,cout} = {a >> 2,1'b0};
+								3: {dout,cout} = {a >> 4,1'b0};
+								7: {dout,cout} = {a >> 8,1'b0};
+								15: {dout,cout} = {a >> 16,1'b0};
+								default: {dout,cout} = {32'b0,1'b0};
+							endcase							
+					4'b0011: {cout,dout} = {a[31], {a[30:0], cin}}; //Rotate left w/ carry
+					4'b0100: {dout,cout} = {{cin,a[31:1]}, a[0]}; //Rotate right w/ carryout
+					4'b0101:	case (shiftamt) //Rotate right w/o carry
+								0: dout = {a[0],a[31:1]};
+								1: dout = {a[1:0],a[31:2]};
+								3: dout = {a[3:0],a[31:4]};
+								7: dout = {a[7:0],a[31:8]};
+								15: dout = {a[15:0],a[31:16]};
+								default: dout = 32'b0;
+							endcase
+					4'b0110:	case (shiftamt) //Rotate left w/o carry
+								0: dout = {a[30:0],a[31]};
+								1: dout = {a[29:0],a[31:30]};
+								3: dout = {a[27:0],a[31:28]};
+								7: dout = {a[23:0],a[31:24]};
+								15: dout = {a[15:0],a[31:16]};
+								default: dout = 32'b0;
+							endcase
+					4'b0111:	{cout,dout} = a + b + cin;
+					default:	dout = 0; 
 				endcase
 			1'b1:
 				case (s)
 					//Logic
-					4'b0000:	begin dout = ~a; cout = 0; end
-					4'b0001:	begin dout = ~(a | b); cout = 0; end
-					4'b0011:	begin dout = 0; cout = 0; end
-					4'b0100:	begin dout = ~(a & b); cout = 0; end
-					4'b0101:	begin dout = ~b; cout = 0; end
-					4'b0110:	begin dout = a ^ b; cout = 0; end
-					4'b0111:	begin dout = ~(a ^ b); cout = 0; end
-					4'b1000:	begin dout = b; cout = 0; end
-					4'b1001:	begin dout = a & b; cout = 0; end
-					4'b1010:	begin dout = 1; cout = 0; end
-					4'b1011:	begin dout = a | b; cout = 0; end
-					4'b1100:	begin dout = a; cout = 0; end
-					default:	begin dout = 0; cout = 0; end
+					4'b0000:	dout = ~a;
+					4'b0001:	dout = ~(a | b);
+					4'b0011:	dout = 0;
+					4'b0100:	dout = ~(a & b);
+					4'b0101:	dout = ~b; 
+					4'b0110:	dout = a ^ b; 
+					4'b0111:	dout = ~(a ^ b);
+					4'b1000:	dout = b; 
+					4'b1001:	dout = a & b;
+					4'b1010:	dout = 1;  
+					4'b1011:	dout = a | b;
+					4'b1100:	dout = a; 
+					default:	dout = 0; 
 				endcase
 		endcase
 
