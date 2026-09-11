@@ -2,12 +2,12 @@
 
 module core(input wire reset, input wire clk, inout logic[31:0] data);
 
-	logic pspwe, sspwe, pcwe, spsel, regwe, aluoptype, lessthan, equalto, accumux, accumulate, templatch, alumuls;
+	logic pspwe, sspwe, pcwe, spsel, regwe, aluoptype, lessthan, equalto, accumux, accumulate, templatch, alumuls, datadir;
 	logic[1:0] pbmuxsel, multmuxas, multmuxbs, multdemuxs;
 	logic[2:0] aluop;
 	logic[3:0] regasel, regbsel, regw;
 	logic[15:0] immediate;
-	logic[31:0] wbdata, pspq, sspq, pcq, spmuxout, rega, regb, aluinb, aluout, multout;
+	logic[31:0] wbdata, pspq, sspq, pcq, spmuxout, rega, regb, aluinb, aluout, multout, internaldata;
 
 	//Stack pointers
 	special_reg psp(wbdata, pspwe, pspq);
@@ -21,7 +21,7 @@ module core(input wire reset, input wire clk, inout logic[31:0] data);
 	ttb2inmux spmux(pspq, sspq, spsel, spmuxout);
 	
 	//Decode
-	ma10k_frontend decoder(clk, reset, data, regasel, regbsel, regw, regwe, aluoptype, aluop, immediate);
+	ma10k_frontend decoder(clk, reset, internaldata, regasel, regbsel, regw, regwe, aluoptype, aluop, immediate, datadir);
 	//Register file
 	regfile registers(regasel, regbsel, regw, regwe, reset, wbdata, rega, regb);
 
@@ -43,7 +43,8 @@ module core(input wire reset, input wire clk, inout logic[31:0] data);
 
 	always
 		begin
-			data = wbdata;
+				data = datadir ? 32'bz : wbdata;
+				internaldata = data;
 		end
 
 endmodule

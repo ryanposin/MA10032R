@@ -165,7 +165,7 @@ module multiplier_unit (input wire clk, input wire[31:0] a, input wire[31:0] b, 
 	
 endmodule
 
-module ma10k_frontend (input wire clk, input wire reset, input wire[31:0] ins, output logic[3:0] portasel, output logic[3:0] portbsel, output logic[3:0] writesel, output logic we, output logic alu_mode, output logic[2:0] alu_function, output logic[15:0] immediate);
+module ma10k_frontend (input wire clk, input wire reset, input wire[31:0] ins, output logic[3:0] portasel, output logic[3:0] portbsel, output logic[3:0] writesel, output logic we, output logic alu_mode, output logic[2:0] alu_function, output logic[15:0] immediate, output logic datadir);
 	logic[6:0] microcode[60];
 	logic itype;
 	logic btype;
