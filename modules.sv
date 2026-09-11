@@ -169,7 +169,7 @@ module ma10k_frontend (input wire clk, input wire reset, input wire[31:0] ins, o
 	logic[6:0] microcode[60];
 	logic itype;
 	logic btype;
-	logic qincrease, qdecrease, qfull;
+	logic qincrease, qdecrease, qfull, stallexec;
 
 	//Prefetch FSM states
 	logic[2:0] fetchfsm;
@@ -267,6 +267,23 @@ module ma10k_frontend (input wire clk, input wire reset, input wire[31:0] ins, o
 				qincrease = 1;
 			else
 				qincrease = 0;
+
+			//Prefetch tracker output
+			if (qtrack == QEMPTY)
+				begin
+					stallexec = 1;
+					qfull = 0;
+				end
+			else if (qtrack == Q6)
+				begin
+					stallexec = 1;
+					qfull = 1;
+				end
+			else
+				begin
+					stallexec = 0;
+					qfull = 0;
+				end
 		end
 
 	always_comb
