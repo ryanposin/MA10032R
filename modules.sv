@@ -169,12 +169,106 @@ module ma10k_frontend (input wire[31:0] ins, output logic[3:0] portasel, output 
 	logic[6:0] microcode[60];
 	logic itype;
 	logic btype;
-	initial begin
-			$readmemh("microcode.txt", microcode);
+	
+	//Prefetch FSM states
+	logic[2:0] fetchfsm;
+	localparam FADDR = 3'b001;
+	localparam FDATA = 3'b010;
+	localparam FSTALL = 3'b100;
+
+	//Prefetch Queue (Q) states
+	logic[2:0] qtrack;
+	localparam QEMPTY = 3'b000;
+	localparam Q1 = 3'b001;
+	localparam Q2 = 3'b010;
+	localparam Q3 = 3'b011;
+	localparam Q4 = 3'b100;
+	localparam Q5 = 3'b101;
+	localparam Q6 = 3'b110;
+
+	//FSMs
+	always_ff @(posedge clk)
+		begin
+			//Prefetch FSM
+			if (~reset)
+				fetchfsm <= FSTALL;
+			case (fetchfsm)
+				FADDR: fetchfsm <= FDATA;
+				FDATA: if (qfull)
+						fetchfsm <= FSTALL;
+					else
+						fetchfsm <= FADDR;
+				FSTALL: if (qfull)
+						fetchfsm <= FSTALL;
+					else
+						fetchfsm <= FADDR;
+				default: fetchfsm <= FSTALL;
+			
+			//Prefetch Queue Tracker
+			if (~reset)
+				qtrack <= QEMPTY;
+			
+			case (qtrack)
+				QEMPTY: if (qincrease & ~qdecrease)
+						qtrack <= Q1;
+					else if ((~qincrease & ~qdecrease) | (qincrease & qdecrease))
+						qtrack <= QEMPTY;
+
+				Q1:	if ((~qincrease & ~qdecrease) | (qincrease & qdecrease))
+						qtrack <= Q1;
+					else if (qincrease & ~qdecrease)
+						qtrack <= Q2;
+					else
+						qtrack <= QEMPTY;
+
+				Q2:	if ((~qincrease & ~qdecrease) | (qincrease & qdecrease))
+						qtrack <= Q2;
+					else if (qincrease & ~qdecrease)
+						qtrack <= Q3;
+					else
+						qtrack <= Q1;
+
+				Q3:	if ((~qincrease & ~qdecrease) | (qincrease & qdecrease))
+						qtrack <= Q3;
+					else if (qincrease & ~qdecrease)
+						qtrack <= Q4;
+					else
+						qtrack <= Q2;
+
+				Q4:	if ((~qincrease & ~qdecrease) | (qincrease & qdecrease))
+						qtrack <= Q4;
+					else if (qincrease & ~qdecrease)
+						qtrack <= Q5;
+					else
+						qtrack <= Q3;
+
+				Q5:	if ((~qincrease & ~qdecrease) | (qincrease & qdecrease))
+						qtrack <= Q5;
+					else if (qincrease & ~qdecrease)
+						qtrack <= Q6;
+					else
+						qtrack <= Q4;
+
+				Q6:	if ((~qincrease & ~qdecrease) | (qincrease & qdecrease))
+						qtrack <= Q6;
+					else if (~qincrease & qdecrease)
+						qtrack <= Q5;
+				default: qtrack <= QEMPTY;
+				
 		end
+
+	//FSM IOs
 	always_comb
 		begin
+			//Prefetch output
+			if (fetchfsm == FDATA)
+				qincrease = 1;
+			else
+				qincrease = 0;
+		end
 
+	always_comb
+		begin
 			portasel = ins[7:4];
 			portbsel = ins[3:0];
 			writesel = ins[11:8];
