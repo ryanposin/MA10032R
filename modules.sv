@@ -19,13 +19,12 @@ endmodule
 //Register file with hardwired ZERO register (R0), R1-R8 are general purpose 
 module regfile (input wire[3:0] portasel, input wire[3:0] portbsel, input wire[3:0] writesel, input wire we, input wire reset, input wire[31:0] writeinput, output logic[31:0] a, output logic[31:0] b);
 
-reg[31:0] registers[8:0];
-assign registers[0] = 0;
+logic[31:0] registers[8:0];
 
 	always_ff @(posedge we | reset)
 		begin
 			if (~reset)
-				registers[8:1] <= {0,0,0,0,0,0,0,0};
+				registers[8:0] <= {0,0,0,0,0,0,0,0,0};
 			else
 				registers[writesel[2:0] + 1] <= writeinput;
 		end
@@ -111,7 +110,7 @@ module alumod (input wire[2:0] s, input wire m, input wire[31:0] a, input wire[3
 		end
 endmodule
 
-module multiplier_unit (input wire clk, input wire[31:0] a, input wire[31:0] b, input wire templatch, input wire outlatch, input wire[1:0] muxas, input wire[1:0] muxbs, input wire[1:0] demuxs, input wire endmux, input wire accumulate, output logic[31:0] multout);
+module multiplier_unit (input wire clk, input wire[31:0] a, input wire[31:0] b, input wire templatch, input wire[1:0] muxas, input wire[1:0] muxbs, input wire[1:0] demuxs, input wire endmux, input wire accumulate, output logic[31:0] multout);
 	
 	logic[31:0] ffa;
 	logic[31:0] ffb;
@@ -166,7 +165,7 @@ module multiplier_unit (input wire clk, input wire[31:0] a, input wire[31:0] b, 
 	
 endmodule
 
-module ma10k_frontend (input wire[31:0] ins, output logic[3:0] portasel, output logic[3:0] portbsel, output logic[3:0] writesel, output logic we, output logic alu_mode, output logic alu_function, output logic[15:0] immediate);
+module ma10k_frontend (input wire[31:0] ins, output logic[3:0] portasel, output logic[3:0] portbsel, output logic[3:0] writesel, output logic we, output logic alu_mode, output logic[2:0] alu_function, output logic[15:0] immediate);
 	logic[6:0] microcode[60];
 	logic itype;
 	logic btype;

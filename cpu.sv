@@ -1,11 +1,13 @@
-`include modules.sv
+`include "modules.sv"
 
-module core(input reset);
+module core(input wire reset, input wire clk, inout logic[31:0] data);
 
-	logic pspwe, sspwe, pcwe, spsel, regwe, aluoptype, lessthan, equalto;
-	logic[1:0] pbmuxsel;
+	logic pspwe, sspwe, pcwe, spsel, regwe, aluoptype, lessthan, equalto, accumux, accumulate, templatch, alumuls;
+	logic[1:0] pbmuxsel, multmuxas, multmuxbs, multdemuxs;
+	logic[2:0] aluop;
 	logic[3:0] regasel, regbsel, regw;
-	logic[31:0] wbdata, pspq, sspq, pcq, spmuxout, rega, regb, aluout;
+	logic[15:0] immediate;
+	logic[31:0] wbdata, pspq, sspq, pcq, spmuxout, rega, regb, aluinb, aluout, multout;
 
 	//Stack pointers
 	special_reg psp(wbdata, pspwe, pspq);
@@ -18,21 +20,32 @@ module core(input reset);
 	//Input 1 = Supervisor Stack Pointer
 	ttb2inmux spmux(pspq, sspq, spsel, spmuxout);
 	
+	//Decode
+	ma10k_frontend decoder(data, regasel, regbsel, regw, regwe, aluoptype, aluop, immediate);
+	//Register file
 	regfile registers(regasel, regbsel, regw, regwe, reset, wbdata, rega, regb);
 
 	//Input 0 = Register output B
 	//Input 1 = Immediate
 	//Input 2 = Program Counter
 	//Input 3 = SPMux
-	ttb4inmux pbmux(regb, 0, pcq, spmuxout, pbmuxsel, aluinb);
+	ttb4inmux pbmux(regb, {16'b0, immediate}, pcq, spmuxout, pbmuxsel, aluinb);
 	
 	//Insert pipeline stage here
 
 	//ALU w/ shifter
-	alumod alu(aluop, aluoptype, rega, aluinb, 0, aluout, lessthan, equalto);
+	alumod alu(aluop, aluoptype, rega, aluinb, immediate[3:0], aluout, lessthan, equalto);
 
 	//Multiplier
-	multiplier_unit mult(clk, rega, aluinb, templatch, outlatch, 	
+	multiplier_unit mult(clk, rega, aluinb, templatch, multmuxas, multmuxbs, multdemuxs, accumux, accumulate, multout);	
+
+	ttb2inmux alumultmux(aluout, multout, alumuls, wbdata); 
+
+	always
+		begin
+			data = wbdata;
+		end
+
 endmodule
 
 
