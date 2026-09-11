@@ -21,7 +21,7 @@ module core(input wire reset, input wire clk, inout logic[31:0] data);
 	ttb2inmux spmux(pspq, sspq, spsel, spmuxout);
 	
 	//Decode
-	ma10k_frontend decoder(data, regasel, regbsel, regw, regwe, aluoptype, aluop, immediate);
+	ma10k_frontend decoder(clk, reset, data, regasel, regbsel, regw, regwe, aluoptype, aluop, immediate);
 	//Register file
 	regfile registers(regasel, regbsel, regw, regwe, reset, wbdata, rega, regb);
 

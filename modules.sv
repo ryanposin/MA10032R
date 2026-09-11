@@ -165,11 +165,12 @@ module multiplier_unit (input wire clk, input wire[31:0] a, input wire[31:0] b, 
 	
 endmodule
 
-module ma10k_frontend (input wire[31:0] ins, output logic[3:0] portasel, output logic[3:0] portbsel, output logic[3:0] writesel, output logic we, output logic alu_mode, output logic[2:0] alu_function, output logic[15:0] immediate);
+module ma10k_frontend (input wire clk, input wire reset, input wire[31:0] ins, output logic[3:0] portasel, output logic[3:0] portbsel, output logic[3:0] writesel, output logic we, output logic alu_mode, output logic[2:0] alu_function, output logic[15:0] immediate);
 	logic[6:0] microcode[60];
 	logic itype;
 	logic btype;
-	
+	logic qincrease, qdecrease, qfull;
+
 	//Prefetch FSM states
 	logic[2:0] fetchfsm;
 	localparam FADDR = 3'b001;
@@ -203,7 +204,8 @@ module ma10k_frontend (input wire[31:0] ins, output logic[3:0] portasel, output 
 					else
 						fetchfsm <= FADDR;
 				default: fetchfsm <= FSTALL;
-			
+			endcase
+
 			//Prefetch Queue Tracker
 			if (~reset)
 				qtrack <= QEMPTY;
@@ -254,7 +256,7 @@ module ma10k_frontend (input wire[31:0] ins, output logic[3:0] portasel, output 
 					else if (~qincrease & qdecrease)
 						qtrack <= Q5;
 				default: qtrack <= QEMPTY;
-				
+			endcase	
 		end
 
 	//FSM IOs
