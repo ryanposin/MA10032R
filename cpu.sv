@@ -1,13 +1,13 @@
 `include "modules.sv"
 
-module core(input wire reset, input wire clk, inout logic[31:0] data);
+module core(input wire reset, input wire clk, inout logic[31:0] addrdata, output logic vdata, output logic vaddr, output logic read, output logic write);
 
-	logic pspwe, sspwe, pcwe, spsel, regwe, aluoptype, lessthan, equalto, accumux, accumulate, templatch, alumuls, datadir;
-	logic[1:0] pbmuxsel, multmuxas, multmuxbs, multdemuxs;
+	logic pspwe, sspwe, pcwe, spsel, regwe, aluoptype, lessthan, equalto, accumux, accumulate, templatch, alumuls, bushighz, busvalidaddr, busvaliddata, addroutmuxs;
+	logic[1:0] pbmuxsel, multmuxas, multmuxbs, multdemuxs, addrmuxs;
 	logic[2:0] aluop;
 	logic[3:0] regasel, regbsel, regw;
 	logic[15:0] immediate;
-	logic[31:0] wbdata, pspq, sspq, pcq, spmuxout, rega, regb, aluinb, aluout, multout, internaldata;
+	logic[31:0] wbdata, pspq, sspq, pcq, spmuxout, rega, regb, aluinb, aluout, multout, internaldata, addrout;
 
 	//Stack pointers
 	special_reg psp(wbdata, pspwe, pspq);
@@ -21,7 +21,7 @@ module core(input wire reset, input wire clk, inout logic[31:0] data);
 	ttb2inmux spmux(pspq, sspq, spsel, spmuxout);
 	
 	//Decode
-	ma10k_frontend decoder(clk, reset, internaldata, regasel, regbsel, regw, regwe, aluoptype, aluop, immediate, datadir);
+	ma10k_frontend decoder(clk, reset, internaldata, regasel, regbsel, regw, regwe, aluoptype, aluop, immediate, bushighz, busvalidaddr, busvaliddata, read, write);
 	//Register file
 	regfile registers(regasel, regbsel, regw, regwe, reset, wbdata, rega, regb);
 
@@ -40,18 +40,13 @@ module core(input wire reset, input wire clk, inout logic[31:0] data);
 	multiplier_unit mult(clk, rega, aluinb, templatch, multmuxas, multmuxbs, multdemuxs, accumux, accumulate, multout);	
 
 	ttb2inmux alumultmux(aluout, multout, alumuls, wbdata); 
+	ttb2inmux addroutput(aluinb, aluout, addroutmuxs, addrout);
 
 	always
 		begin
-				data = datadir ? 32'bz : wbdata;
-				internaldata = data;
+				addrdata = bushighz ? 32'bz : busvaliddata ? addrout : wbdata;
+				internaldata = addrdata;
 		end
 
 endmodule
-
-
-
-
-
-
 

@@ -165,17 +165,18 @@ module multiplier_unit (input wire clk, input wire[31:0] a, input wire[31:0] b, 
 	
 endmodule
 
-module ma10k_frontend (input wire clk, input wire reset, input wire[31:0] ins, output logic[3:0] portasel, output logic[3:0] portbsel, output logic[3:0] writesel, output logic we, output logic alu_mode, output logic[2:0] alu_function, output logic[15:0] immediate, output logic datadir);
-	logic[6:0] microcode[60];
+module ma10k_frontend (input wire clk, input wire reset, input wire[31:0] ins, output logic[3:0] portasel, output logic[3:0] portbsel, output logic[3:0] writesel, output logic we, output logic alu_mode, output logic[2:0] alu_function, output logic[15:0] immediate, output wire highz, output logic validaddr, output logic validdata, output logic busrd, output logic buswrite, output logic addroutmuxs);
+	
 	logic itype;
 	logic btype;
-	logic qincrease, qdecrease, qfull, stallexec;
+	logic qincrease, qdecrease, qfull, stallexec, memaccess;
+	logic[31:0] instructionlatch; 
+	localparam PCOUNTER = 2'b00;
 
-	//Prefetch FSM states
-	logic[2:0] fetchfsm;
-	localparam FADDR = 3'b001;
-	localparam FDATA = 3'b010;
-	localparam FSTALL = 3'b100;
+	//Fetch FSM states
+	logic fetchdecode;
+	localparam FSTALL = 0;
+	localparam FDECODE = 1;
 
 	//Prefetch Queue (Q) states
 	logic[2:0] qtrack;
@@ -186,30 +187,95 @@ module ma10k_frontend (input wire clk, input wire reset, input wire[31:0] ins, o
 	localparam Q4 = 3'b100;
 	localparam Q5 = 3'b101;
 	localparam Q6 = 3'b110;
+	
+	//Execute FSM states
+	logic[4:0] etrack;
+	localparam EXSTALL = 0;
+	localparam EXWB0 = 1;
+	//Full word multiply (32b)
+	localparam TTMUL0 = 2;
+	localparam TTMUL1 = 3;
+	localparam TTMUL2 = 4;
+	localparam TTMUL3 = 5;
+	localparam TTMUL4 = 6;
+	localparam TTMUL5 = 7;
+	localparam TTMUL6 = 8;
+	localparam TTMUL7 = 9;
+	localparam TTMUL8 = 10;
+	localparam TTMUL9 = 11;
+	localparam TTMUL10 = 12;
+	localparam TTMUL11 = 13;
+	localparam TTMUL12 = 14;
+	localparam TTMUL13 = 15;
+	localparam TTMUL14 = 16;
+	localparam TTMUL15 = 17;
+	localparam TTMULWB = 18;
+	//Half word multiply (16b)
+	localparam HWMUL0 = 19;
+	localparam HWMUL1 = 20;
+	localparam HWMUL2 = 21;
+	localparam HWMUL3 = 22;
+	//Quarter word multiply (8b)
+	localparam QWMUL = 23;
+	//Shift states
+	localparam SH16 = 24;
+	localparam SH8 = 25;
+	localparam SH4 = 26;
+	localparam SH2 = 27;
+	localparam SH1 = 28;
+
+	//Bus unit FSM states;
+	logic[2:0] busunitstate;
+	localparam HIGHZ = 3'b000;
+	localparam OUTPUTPC = 3'b001;
+	localparam LINST = 3'b010;
+	localparam OUTPUTMEMADDR = 3'b011;
+	localparam OUTPUTMEMDATA = 3'b100;
+	localparam LDATA = 3'b101;
+
+	//Bus unit FSM
+	always_ff @(negedge clk)
+		begin
+			if (~reset)
+				busunitstate <= HIGHZ;
+			case (busunitstate)
+				HIGHZ: if (~highz & memaccess)
+						busunitstate <= OUTPUTMEMADDR;
+					else if (~highz & ~qfull & ~memaccess)
+						busunitstate <= OUTPUTPC;
+					else if ((~mem & qfull) | highz)
+						busunitstate <= HIGHZ;
+				OUTPUTPC: busunitstate <= LINST;
+				LINST: busunitstate <= HIGHZ;
+				OUTPUTMEMADDR: if (~we)
+							busunitstate <= OUTPUTMEMDATA;
+						else
+							busunitstate <= LDATA;
+				OUTPUTMEMDATA: busunitstate <= HIGHZ;
+				LDATA: busunitstate <= HIGHZ;
+				default: busunitstate <= HIGHZ;
+			endcase
+		end
 
 	//FSMs
 	always_ff @(posedge clk)
 		begin
-			//Prefetch FSM
+			//Fetch from prefetch FIFO
 			if (~reset)
-				fetchfsm <= FSTALL;
-			case (fetchfsm)
-				FADDR: fetchfsm <= FDATA;
-				FDATA: if (qfull)
-						fetchfsm <= FSTALL;
-					else
-						fetchfsm <= FADDR;
-				FSTALL: if (qfull)
-						fetchfsm <= FSTALL;
-					else
-						fetchfsm <= FADDR;
-				default: fetchfsm <= FSTALL;
+				fetchdecode <= FSTALL;
+
+			case (fetchdecode)
+				FSTALL: if (qempty)
+						fetchdecode <= FSTALL;
+					else if (~qempty)
+						fetchdecode <= FDECODE;
+				FDECODE: fetchdecode <= FSTALL;
 			endcase
 
 			//Prefetch Queue Tracker
 			if (~reset)
 				qtrack <= QEMPTY;
-			
+
 			case (qtrack)
 				QEMPTY: if (qincrease & ~qdecrease)
 						qtrack <= Q1;
@@ -257,16 +323,128 @@ module ma10k_frontend (input wire clk, input wire reset, input wire[31:0] ins, o
 						qtrack <= Q5;
 				default: qtrack <= QEMPTY;
 			endcase	
+			
+			//Execute Sequencing FSM
+			if (~reset)
+				etrack <= EXSTALL;
+
+			case (etrack)
+			EXSTALL:
+			EX0:	if (idone)
+					etrack <= EXSTALL;
+				else
+					etrack <= EX1;
+
+			EX1:	if (idone)
+					etrack <= EXSTALL;
+				else
+					etrack <= EX2;
+
+			EX2:	if (idone)
+					etrack <= EXSTALL;
+				else
+					etrack <= EX3;
+
+			EX3:	if (idone)
+					etrack <= EXSTALL;
+				else
+					etrack <= EX4;
+
+			EX4:	if (idone)
+					etrack <= EXSTALL;
+				else
+					etrack <= EX5;
+
+			EX5:	if (idone)
+					etrack <= EXSTALL;
+				else
+					etrack <= EX6;
+
+			EX6:	if (idone)
+					etrack <= EXSTALL;
+				else
+					etrack <= EX7;
+			EX7:	if (idone)
+					etrack <= EXSTALL;
+				else
+					etrack <= EX8;
+			EX8:	if (idone)
+					etrack <= EXSTALL;
+				else
+					etrack <= EX9;
+			EX9:	if (idone)
+					etrack <= EXSTALL;
+				else
+					etrack <= EX10;
+			EX10:	if (idone)
+					etrack <= EXSTALL;
+				else
+					etrack <= EX11;
+			EX11:	if (idone)
+					etrack <= EXSTALL;
+				else
+					etrack <= EX12;
+			EX12:	if (idone)
+					etrack <= EXSTALL;
+				else
+					etrack <= EX13;
+			EX13:	if (idone)
+					etrack <= EXSTALL;
+				else
+					etrack <= EX14;
+			EX14:	if (idone)
+					etrack <= EXSTALL;
+				else
+					etrack <= EX15;
+			EX15:	if (idone)
+					etrack <= EXSTALL;
+				else
+					etrack <= EX16;
+			EX16:	if (idone)
+					etrack <= EX17;
+				else
+					etrack <= EXSTALL;
+			EX17: etrack <= EXSTALL;
+			default: etrack <= EXSTALL;
+
+
+
+
+			default: etrack <= EXSTALL;
+			endcase
 		end
 
 	//FSM IOs
 	always_comb
 		begin
-			//Prefetch output
-			if (fetchfsm == FDATA)
-				qincrease = 1;
+			//Bus unit output
+			if (busunitstate == HIGHZ)
+				highz = 1;
 			else
-				qincrease = 0;
+				highz = 0;
+			if (busunitstate == OUTPUTPC | busunitstate == OUTPUTMEMADDR | busunitstate == OUTPUTMEMDATA)
+				buswrite = 1;
+			else
+				buswrite = 0;
+			if (busunitstate == OUTPUTPC | busunitstate == OUTPUTMEMADDR)
+				validaddr = 1;
+			else
+				validaddr = 0;
+			if (busunitstate == OUTPUTMEMDATA)
+				validdata = 1;
+			else
+				validdata = 0;
+
+			if (busunitstate == LDATA | busunitstate == LINST)
+				begin
+					busread = 1;
+					validdata = 1;
+				end
+			else
+				begin
+					busread = 0;
+					validdata = 0;
+				end
 
 			//Prefetch tracker output
 			if (qtrack == QEMPTY)
@@ -285,14 +463,227 @@ module ma10k_frontend (input wire clk, input wire reset, input wire[31:0] ins, o
 					qfull = 0;
 				end
 		end
-
+	always_latch
+		if (busunitstate == LINST)
+			instructionlatch = ins;
 	always_comb
 		begin
-			portasel = ins[7:4];
-			portbsel = ins[3:0];
-			writesel = ins[11:8];
-			if (itype) immediate = {ins[31:20],ins[3:0]}; 
-			else if (btype) immediate = {ins[31:20],ins[11:8]};
+			portasel = instructionlatch[7:4];
+			portbsel = instructionlatch[3:0];
+			writesel = instructionlatch[11:8];
+			if (itype) immediate = {instructionlatch[31:20],instructionlatch[3:0]}; 
+			else if (btype) immediate = {instructionlatch[31:20],instructionlatch[11:8]};
 			else immediate = 0;
+		end
+	//Decode
+	always_comb
+		begin
+			case (currenti[19:16])
+				4'b0000:	if (etrack == EX0)
+							begin
+								alumode = currenti[15];
+								aluop = currenti[14:12];
+								pbmuxsel = 4'b00;
+								itype = 0;
+								alumuls = 0;
+								idone = 1;
+								regwe = 1;
+							end
+				4'b0100:	if (etrack == EX0)
+							begin
+								alumode = currenti[15];
+								aluop = currenti[14:12];
+								pbmuxsel = 4'b01;
+								itype = 1;
+								alumuls = 0;
+								idone = 1;
+								regwe = 1;
+							end
+						else
+							itype = 0;
+				4'b0001: case (currenti[15:12])
+						4'b0000: case (etrack)
+							EX0:
+								begin
+									pbmuxsel = 4'b00;
+									templatch = 1;
+									resetmult = 1;
+								end
+							EX1:
+								begin
+									resultmult = 0;
+									multmuxas = 0;
+									multmuxbs = 0;
+									multdemuxs = 0;
+								end
+							EX2: begin
+									alumuls = 1;
+									idone = 1;
+									regwe = 1;
+								end
+							default:
+								idone = 1;
+						4'b0001:
+							case (ETRACK)
+								EX0: begin
+									pbmuxsel = 4'b00;
+									templatch = 1;
+									resetmult = 1;
+								end
+								EX1: begin
+									resetmult = 0;
+									multmuxas = 0;
+									multmuxbs = 0;
+									multdemuxs = 0;
+								end
+								EX2: begin
+									multmuxas = 0;
+									multmuxbs = 1;
+									multdemuxs = 1;
+								end
+								EX3: begin
+									multmuxas = 1;
+									multmuxbs = 0;
+									multdemuxs = 1;
+								end
+								EX4: begin
+									multmuxas = 1;
+									multmuxbs = 1;
+									multdemuxs = 2;
+								end
+								EX5: begin
+									alumuls = 1;
+									idone = 1;
+									regwe = 1;
+								end
+								default:
+									regwe = 0;
+							endcase
+						4'b0010:
+						//ABCD
+						//0 = D
+						//1 = C
+						//2 = B
+						//3 = A
+						//
+						//EFGH
+						//0 = H
+						//1 = G
+						//2 = F
+						//3 = E
+						//
+						// << 0 - 0
+						// << 8 - 1
+						// << 16 - 2
+						// << 24 - 3
+						// << 32 - 4
+						// << 40 - 5
+						// << 48 - 6
+							case (etrack)
+								EX0: begin
+									pbmuxsel = 4'b00;
+									templatch = 1;
+									resetmult = 1;
+								end
+								EX1: begin //DH
+									resetmult = 0;
+									multmuxas = 0;
+									multmuxbs = 0;
+									multdemuxs = 0;
+								end
+								EX2: begin //DG << 8
+									multmuxas = 0;
+									multmuxbs = 1;
+									multdemuxs = 1;
+								end
+								EX3: begin //DF << 16
+									multmuxas = 0;
+									multmuxbs = 2;
+									multdemuxs = 2;
+								end
+								EX4: begin //DE << 24
+									multmuxas = 0;
+									multmuxbs = 3;
+									multdemuxs = 3;
+								end
+								EX5: begin //CH << 8
+									multmuxas = 1;
+									multmuxbs = 0;
+									multdemuxs = 1;
+								end
+								EX6: begin //CG << 16
+									multmuxas = 1;
+									multmuxbs = 1;
+									multdemuxs = 2;
+								end
+								EX7: begin //CF << 24
+									multmuxas = 1;
+									multmuxbs = 2;
+									multdemuxs = 3;
+								end
+								EX8: begin //CE << 32
+									multmuxas = 1;
+									multmuxbs = 3;
+									multdemuxs = 4;
+								end
+								EX9: begin //BH << 16
+									multmuxas = 2;
+									multmuxbs = 0;
+									multdemuxs = 2;
+								end
+								EX10: begin //BG << 24
+									multmuxas = 2;
+									multmuxbs = 1;
+									multdemuxs = 3;
+								end
+								EX11: begin //BF << 32
+									multmuxas = 2;
+									multmuxbs = 2;
+									multdemuxs = 4;
+								end
+								EX12: begin //BE << 40
+									multmuxas = 2;
+									multmuxbs = 3;
+									multdemuxs = 5;
+								end
+								EX13: begin //AH << 24
+									multmuxas = 3;
+									multmuxbs = 0;
+									multdemuxs 3;
+								end
+								EX14: begin //AG << 32
+									multmuxas = 3;
+									multmuxbs = 1;
+									multdemuxs = 4;
+								end
+								EX15: begin //AF << 40
+									multmuxas = 3;
+									multmuxbs = 2;
+									multdemuxs = 5;
+								end
+								EX16: begin //AE << 48
+									multmuxas = 3;
+									multmuxbs = 3;
+									multdemuxs = 6;
+								end
+								EX17: begin
+									alumuls = 1;
+									idone = 1;
+									regwe = 1;
+								end
+								default:
+									regwe = 0;
+							endcase
+						default:
+					endcase
+				4'b0010:
+					case (etrack)
+						EX0:
+						default:
+					endcase
+				4'b0011:
+				4'b0111:
+				default:
+			endcase
 		end
 endmodule
