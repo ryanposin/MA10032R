@@ -16,17 +16,17 @@ module ttb4inmux (input wire[31:0] i0, input wire[31:0] i1, input wire[31:0] i2,
 		q = select[1] ? (select[0] ? i3 : i2) : (select[0] ? i1 : i0);
 endmodule
 
-//Register file with hardwired ZERO register (R0), R1-R8 are general purpose 
+//Register file with hardwired ZERO register (R0), R1-R15 are general purpose 
 module regfile (input wire[3:0] portasel, input wire[3:0] portbsel, input wire[3:0] writesel, input wire we, input wire reset, input wire[31:0] writeinput, output logic[31:0] a, output logic[31:0] b);
 
-logic[31:0] registers[8:0];
+logic[31:0] registers[15:0];
 
 	always_ff @(posedge we | reset)
 		begin
 			if (~reset)
-				registers[8:0] <= {0,0,0,0,0,0,0,0,0};
+				registers[15:0] <= {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 			else
-				registers[writesel[2:0] + 1] <= writeinput;
+				registers[writesel[3:0] + 1] <= writeinput;
 		end
 	always_comb
 		begin
@@ -208,3 +208,11 @@ module execute_unit(input logic clk, input logic[1:0] funcsel, input logic[31:0]
 	ttb2inmux alumultmux(aluout, multout, alumuls, wbdata); 
 	ttb2inmux addroutput(aluinb, aluout, addroutmuxs, addrout);
 endmodule
+
+//Memory access unit
+//Inputs: 
+//Outputs:
+module mem_access_unit();
+endmodule
+
+
