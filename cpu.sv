@@ -21,7 +21,8 @@ module core(input wire reset, input wire clk, inout logic[31:0] addrdata, output
 	ttb2inmux spmux(pspq, sspq, spsel, spmuxout);
 	
 	//Decode
-	ma10k_frontend decoder(clk, reset, internaldata, regasel, regbsel, regw, regwe, aluoptype, aluop, immediate, bushighz, busvalidaddr, busvaliddata, read, write);
+	//ma10k_frontend decoder(clk, reset, internaldata, regasel, regbsel, regw, regwe, aluoptype, aluop, immediate, bushighz, busvalidaddr, busvaliddata, read, write);
+
 	//Register file
 	regfile registers(regasel, regbsel, regw, regwe, reset, wbdata, rega, regb);
 
@@ -32,21 +33,6 @@ module core(input wire reset, input wire clk, inout logic[31:0] addrdata, output
 	ttb4inmux pbmux(regb, {16'b0, immediate}, pcq, spmuxout, pbmuxsel, aluinb);
 	
 	//Insert pipeline stage here
-
-	//ALU w/ shifter
-	alumod alu(aluop, aluoptype, rega, aluinb, immediate[3:0], aluout, lessthan, equalto);
-
-	//Multiplier
-	multiplier_unit mult(clk, rega, aluinb, templatch, multmuxas, multmuxbs, multdemuxs, accumux, accumulate, multout);	
-
-	ttb2inmux alumultmux(aluout, multout, alumuls, wbdata); 
-	ttb2inmux addroutput(aluinb, aluout, addroutmuxs, addrout);
-
-	always
-		begin
-				addrdata = bushighz ? 32'bz : busvaliddata ? addrout : wbdata;
-				internaldata = addrdata;
-		end
 
 endmodule
 

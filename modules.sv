@@ -156,7 +156,7 @@ module multiplier_unit (input wire clk, input wire[31:0] a, input wire[31:0] b, 
 				carrybuf = multtempout[15:8];
 	
 	//Accumulate
-	always_ff @(negedge clk)
+	always_ff @(posedge clk)
 		begin
 			if (accumulate)
 				{carry,productreg} <= endmux ? (productreg + demux) : ({24'b0, carrybuf} + demux + carry);
@@ -165,370 +165,46 @@ module multiplier_unit (input wire clk, input wire[31:0] a, input wire[31:0] b, 
 	
 endmodule
 
-module ma10k_frontend (input wire clk, input wire reset, input wire[31:0] ins, output logic[3:0] portasel, output logic[3:0] portbsel, output logic[3:0] writesel, output logic we, output logic alu_mode, output logic[2:0] alu_function, output logic[15:0] immediate, output wire highz, output logic validaddr, output logic validdata, output logic busrd, output logic buswrite, output logic addroutmuxs);
-	
-	logic itype;
-	logic btype;
-	logic qincrease, qdecrease, qfull, stallexec, memaccess;
-	logic[31:0] instructionlatch; 
-	logic[31:0] exstep[18];
-	localparam PCOUNTER = 2'b00;
 
-	//Fetch FSM states
-	logic fetchdecode;
-	localparam FSTALL = 0;
-	localparam FDECODE = 1;
+//Bus unit
+//Inputs: clk, reset, qfull, todata, memreq
+//Outputs: validaddr, validdata, read, write, toexec, toprefetch
+//Inout: adbus
+module bunit(input logic clk, input logic reset, input logic qfull, input logic memreq, input logic[31:0] todata, output logic validaddr, output logic validdata, output logic read, output logic write, output logic[31:0] toexec, output logic[31:0] toprefetch, inout logic[31:0] adbus);
+endmodule
 
-	//Prefetch Queue (Q) states
-	logic[2:0] qtrack;
-	localparam QEMPTY = 3'b000;
-	localparam Q1 = 3'b001;
-	localparam Q2 = 3'b010;
-	localparam Q3 = 3'b011;
-	localparam Q4 = 3'b100;
-	localparam Q5 = 3'b101;
-	localparam Q6 = 3'b110;
-	
-	//Execute FSM states
-	logic[4:0] etrack;
-	localparam EXSTALL = 0;
-	localparam EXWB0 = 1;
-	//Full word multiply (32b)
-	localparam TTMUL0 = 2;
-	localparam TTMUL1 = 3;
-	localparam TTMUL2 = 4;
-	localparam TTMUL3 = 5;
-	localparam TTMUL4 = 6;
-	localparam TTMUL5 = 7;
-	localparam TTMUL6 = 8;
-	localparam TTMUL7 = 9;
-	localparam TTMUL8 = 10;
-	localparam TTMUL9 = 11;
-	localparam TTMUL10 = 12;
-	localparam TTMUL11 = 13;
-	localparam TTMUL12 = 14;
-	localparam TTMUL13 = 15;
-	localparam TTMUL14 = 16;
-	localparam TTMUL15 = 17;
-	localparam TTMULWB = 18;
-	//Half word multiply (16b)
-	localparam HWMUL0 = 19;
-	localparam HWMUL1 = 20;
-	localparam HWMUL2 = 21;
-	localparam HWMUL3 = 22;
-	//Quarter word multiply (8b)
-	localparam QWMUL = 23;
-	//Shift states
-	localparam SH16 = 24;
-	localparam SH8 = 25;
-	localparam SH4 = 26;
-	localparam SH2 = 27;
-	localparam SH1 = 28;
+//Prefetch unit
+//Inputs: clk, reset, instreq, insttoadd
+//Outputs: qfull, tofetch
+module prefetcher(input logic clk, input logic reset, input logic instreq, input logic[31:0] insttoadd, output logic qfull, output logic[31:0] tofetch);
+endmodule
 
-	//Bus unit FSM states;
-	logic[2:0] busunitstate;
-	localparam HIGHZ = 3'b000;
-	localparam OUTPUTPC = 3'b001;
-	localparam LINST = 3'b010;
-	localparam OUTPUTMEMADDR = 3'b011;
-	localparam OUTPUTMEMDATA = 3'b100;
-	localparam LDATA = 3'b101;
+//Fetch unit
+//Inputs: clk, reset, ready, insin
+//Outputs: insout
+module fetcher(input logic clk, input logic reset, input logic ready, input logic[31:0] insin, output logic[31:0] insout);
+endmodule
 
-	//Bus unit FSM
-	always_ff @(negedge clk)
-		begin
-			if (~reset)
-				busunitstate <= HIGHZ;
-			case (busunitstate)
-				HIGHZ: if (~highz & memaccess)
-						busunitstate <= OUTPUTMEMADDR;
-					else if (~highz & ~qfull & ~memaccess)
-						busunitstate <= OUTPUTPC;
-					else if ((~mem & qfull) | highz)
-						busunitstate <= HIGHZ;
-				OUTPUTPC: busunitstate <= LINST;
-				LINST: busunitstate <= HIGHZ;
-				OUTPUTMEMADDR: if (~we)
-							busunitstate <= OUTPUTMEMDATA;
-						else
-							busunitstate <= LDATA;
-				OUTPUTMEMDATA: busunitstate <= HIGHZ;
-				LDATA: busunitstate <= HIGHZ;
-				default: busunitstate <= HIGHZ;
-			endcase
-		end
+//Decoder
+//Inputs: instruction
+//Outputs: icode[18]
+module ma10k_frontend(input logic[31:0] instruction, output logic[21:0] icode[18]);
+endmodule
 
-	//FSMs
-	always_ff @(posedge clk)
-		begin
-			//Fetch from prefetch FIFO
-			if (~reset)
-				fetchdecode <= FSTALL;
+//Pipeline break
+//Inputs: clk, reset, icode[18], a, b, regtowrite
+//Outputs: icodefunc, afunc, bfunc, regtowritefunc
+module pipebreak(input logic clk, input logic reset, input logic[21:0] icode[18], input logic[31:0] a, input logic[31:0] b, input logic[3:0] regtowrite, output logic[21:0] icodefunc, output logic[31:0] afunc, output logic[31:0] bfunc, output logic[3:0] regtowritefunc);
+endmodule
 
-			case (fetchdecode)
-				FSTALL: if (qempty)
-						fetchdecode <= FSTALL;
-					else if (~qempty)
-						fetchdecode <= FDECODE;
-				FDECODE: fetchdecode <= FSTALL;
-			endcase
-
-			//Prefetch Queue Tracker
-			if (~reset)
-				qtrack <= QEMPTY;
-
-			case (qtrack)
-				QEMPTY: if (qincrease & ~qdecrease)
-						qtrack <= Q1;
-					else if ((~qincrease & ~qdecrease) | (qincrease & qdecrease))
-						qtrack <= QEMPTY;
-
-				Q1:	if ((~qincrease & ~qdecrease) | (qincrease & qdecrease))
-						qtrack <= Q1;
-					else if (qincrease & ~qdecrease)
-						qtrack <= Q2;
-					else
-						qtrack <= QEMPTY;
-
-				Q2:	if ((~qincrease & ~qdecrease) | (qincrease & qdecrease))
-						qtrack <= Q2;
-					else if (qincrease & ~qdecrease)
-						qtrack <= Q3;
-					else
-						qtrack <= Q1;
-
-				Q3:	if ((~qincrease & ~qdecrease) | (qincrease & qdecrease))
-						qtrack <= Q3;
-					else if (qincrease & ~qdecrease)
-						qtrack <= Q4;
-					else
-						qtrack <= Q2;
-
-				Q4:	if ((~qincrease & ~qdecrease) | (qincrease & qdecrease))
-						qtrack <= Q4;
-					else if (qincrease & ~qdecrease)
-						qtrack <= Q5;
-					else
-						qtrack <= Q3;
-
-				Q5:	if ((~qincrease & ~qdecrease) | (qincrease & qdecrease))
-						qtrack <= Q5;
-					else if (qincrease & ~qdecrease)
-						qtrack <= Q6;
-					else
-						qtrack <= Q4;
-
-				Q6:	if ((~qincrease & ~qdecrease) | (qincrease & qdecrease))
-						qtrack <= Q6;
-					else if (~qincrease & qdecrease)
-						qtrack <= Q5;
-				default: qtrack <= QEMPTY;
-			endcase	
-			
-			//Execute Sequencing FSM
-			if (~reset)
-				etrack <= EXSTALL;
-
-			case (etrack)
-			EXSTALL: if (dispatch)
-					etrack <= EX0;
-				else
-					etrack <= EXSTALL;
-			EX0:	if (idone)
-					etrack <= EXSTALL;
-				else
-					etrack <= EX1;
-
-			EX1:	if (idone)
-					etrack <= EXSTALL;
-				else
-					etrack <= EX2;
-
-			EX2:	if (idone)
-					etrack <= EXSTALL;
-				else
-					etrack <= EX3;
-
-			EX3:	if (idone)
-					etrack <= EXSTALL;
-				else
-					etrack <= EX4;
-
-			EX4:	if (idone)
-					etrack <= EXSTALL;
-				else
-					etrack <= EX5;
-
-			EX5:	if (idone)
-					etrack <= EXSTALL;
-				else
-					etrack <= EX6;
-
-			EX6:	if (idone)
-					etrack <= EXSTALL;
-				else
-					etrack <= EX7;
-			EX7:	if (idone)
-					etrack <= EXSTALL;
-				else
-					etrack <= EX8;
-			EX8:	if (idone)
-					etrack <= EXSTALL;
-				else
-					etrack <= EX9;
-			EX9:	if (idone)
-					etrack <= EXSTALL;
-				else
-					etrack <= EX10;
-			EX10:	if (idone)
-					etrack <= EXSTALL;
-				else
-					etrack <= EX11;
-			EX11:	if (idone)
-					etrack <= EXSTALL;
-				else
-					etrack <= EX12;
-			EX12:	if (idone)
-					etrack <= EXSTALL;
-				else
-					etrack <= EX13;
-			EX13:	if (idone)
-					etrack <= EXSTALL;
-				else
-					etrack <= EX14;
-			EX14:	if (idone)
-					etrack <= EXSTALL;
-				else
-					etrack <= EX15;
-			EX15:	if (idone)
-					etrack <= EXSTALL;
-				else
-					etrack <= EX16;
-			EX16:	if (idone)
-					etrack <= EX17;
-				else
-					etrack <= EXSTALL;
-			EX17: etrack <= EXSTALL;
-			default: etrack <= EXSTALL;
-
-
-
-
-			default: etrack <= EXSTALL;
-			endcase
-		end
-
-	//FSM IOs
-	always_comb
-		begin
-			//Bus unit output
-			if (busunitstate == HIGHZ)
-				highz = 1;
-			else
-				highz = 0;
-			if (busunitstate == OUTPUTPC | busunitstate == OUTPUTMEMADDR | busunitstate == OUTPUTMEMDATA)
-				buswrite = 1;
-			else
-				buswrite = 0;
-			if (busunitstate == OUTPUTPC | busunitstate == OUTPUTMEMADDR)
-				validaddr = 1;
-			else
-				validaddr = 0;
-			if (busunitstate == OUTPUTMEMDATA)
-				validdata = 1;
-			else
-				validdata = 0;
-
-			if (busunitstate == LDATA | busunitstate == LINST)
-				begin
-					busread = 1;
-					validdata = 1;
-				end
-			else
-				begin
-					busread = 0;
-					validdata = 0;
-				end
-
-			//Prefetch tracker output
-			if (qtrack == QEMPTY)
-				begin
-					stallexec = 1;
-					qfull = 0;
-				end
-			else if (qtrack == Q6)
-				begin
-					stallexec = 1;
-					qfull = 1;
-				end
-			else
-				begin
-					stallexec = 0;
-					qfull = 0;
-				end
-		end
-	always_latch
-		if (busunitstate == LINST)
-			instructionlatch = ins;
-	always_comb
-		begin
-			portasel = instructionlatch[7:4];
-			portbsel = instructionlatch[3:0];
-			writesel = instructionlatch[11:8];
-			if (itype) immediate = {instructionlatch[31:20],instructionlatch[3:0]}; 
-			else if (btype) immediate = {instructionlatch[31:20],instructionlatch[11:8]};
-			else immediate = 0;
-		end
-	//Decode
-	always_comb
-		begin
-			case (currenti[19:16])
-				4'b0000: //ALU op R2R
-				4'b0100: //ALU op w/ Immediate
-				4'b0001: case (currenti[15:12])
-						4'b0000: //MULQW
-						4'b0001: //MULHW
-						4'b0010: //MULW
-				4'b0010:
-					case (currenti[15:12])
-						4'b0000: //BREQ
-						4'b0001: //BRNEQ
-						4'b0010: //BRLT
-						4'b0011: //BRLTEQ
-						4'b0100: //JUMPREL
-						4'b0101: //JUMPA
-						4'b0110: //JUMPR
-						4'b0111: //JUMPI
-						4'b1000: //CALL
-						4'b1001: //RET
-						default:
-					endcase
-				4'b0011:
-					case(currenti[15:12])
-						4'b0000: //LRR
-						4'b0001: //LRI
-						4'b0010: //LRA
-						4'b0011: //LUI
-						4'b0100: //LLI
-						4'b0101: //STA
-						4'b0110: //STR
-						4'b0111: //STI
-						4'b1000: //LOFST
-						4'b1001: //SOFST
-						4'b1010: //PUSH
-						4'b1011: //POP
-						4'b1100: //LL
-						4'b1101: //SC
-						default:
-					endcase
-				4'b0111:
-					case(currenti[15:12])
-						4'b0000: //PRG
-						4'b0001: //RESPSP
-						4'b0010: //SSYS
-						4'b0011: //GSYS
-					endcase
-				default:
-			endcase
-		end
+//Execution unit
+//Inputs: clk, reset, funcsel, ina, inb, icode[18]
+//Outputs: execout
+module execute_unit(input logic clk, input logic[1:0] funcsel, input logic[31:0] ina, input logic[31:0] inb, input logic[21:0] icode[18], output logic[31:0] execout);
+	//ALU w/ shifter
+	alumod alu(aluop, aluoptype, rega, aluinb, immediate[3:0], aluout, lessthan, equalto);
+	//Multiplier
+	multiplier_unit mult(clk, rega, aluinb, templatch, multmuxas, multmuxbs, multdemuxs, accumux, accumulate, multout);	
+	ttb2inmux alumultmux(aluout, multout, alumuls, wbdata); 
+	ttb2inmux addroutput(aluinb, aluout, addroutmuxs, addrout);
 endmodule
