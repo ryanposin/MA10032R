@@ -171,6 +171,7 @@ module ma10k_frontend (input wire clk, input wire reset, input wire[31:0] ins, o
 	logic btype;
 	logic qincrease, qdecrease, qfull, stallexec, memaccess;
 	logic[31:0] instructionlatch; 
+	logic[31:0] exstep[18];
 	localparam PCOUNTER = 2'b00;
 
 	//Fetch FSM states
@@ -482,190 +483,12 @@ module ma10k_frontend (input wire clk, input wire reset, input wire[31:0] ins, o
 	always_comb
 		begin
 			case (currenti[19:16])
-				4'b0000:	if (etrack == EX0)
-							begin
-								alumode = currenti[15];
-								aluop = currenti[14:12];
-								pbmuxsel = 4'b00;
-								itype = 0;
-								alumuls = 0;
-								idone = 1;
-								regwe = 1;
-							end
-				4'b0100:	if (etrack == EX0)
-							begin
-								alumode = currenti[15];
-								aluop = currenti[14:12];
-								pbmuxsel = 4'b01;
-								itype = 1;
-								alumuls = 0;
-								idone = 1;
-								regwe = 1;
-							end
-						else
-							itype = 0;
+				4'b0000: //ALU op R2R
+				4'b0100: //ALU op w/ Immediate
 				4'b0001: case (currenti[15:12])
-						4'b0000: case (etrack)
-							EX0:
-								begin
-									pbmuxsel = 4'b00;
-									templatch = 1;
-									resetmult = 1;
-								end
-							EX1:
-								begin
-									resultmult = 0;
-									multmuxas = 0;
-									multmuxbs = 0;
-									multdemuxs = 0;
-								end
-							EX2: begin
-									alumuls = 1;
-									idone = 1;
-									regwe = 1;
-								end
-							default:
-								idone = 1;
-						4'b0001:
-							case (ETRACK)
-								EX0: begin
-									pbmuxsel = 4'b00;
-									templatch = 1;
-									resetmult = 1;
-								end
-								EX1: begin
-									resetmult = 0;
-									multmuxas = 0;
-									multmuxbs = 0;
-									multdemuxs = 0;
-								end
-								EX2: begin
-									multmuxas = 0;
-									multmuxbs = 1;
-									multdemuxs = 1;
-								end
-								EX3: begin
-									multmuxas = 1;
-									multmuxbs = 0;
-									multdemuxs = 1;
-								end
-								EX4: begin
-									multmuxas = 1;
-									multmuxbs = 1;
-									multdemuxs = 2;
-								end
-								EX5: begin
-									alumuls = 1;
-									idone = 1;
-									regwe = 1;
-								end
-								default:
-									regwe = 0;
-							endcase
-						4'b0010:
-							case (etrack)
-								EX0: begin
-									pbmuxsel = 4'b00;
-									templatch = 1;
-									resetmult = 1;
-								end
-								EX1: begin //DH
-									resetmult = 0;
-									multmuxas = 0;
-									multmuxbs = 0;
-									multdemuxs = 0;
-								end
-								EX2: begin //DG << 8
-									multmuxas = 0;
-									multmuxbs = 1;
-									multdemuxs = 1;
-								end
-								EX3: begin //DF << 16
-									multmuxas = 0;
-									multmuxbs = 2;
-									multdemuxs = 2;
-								end
-								EX4: begin //DE << 24
-									multmuxas = 0;
-									multmuxbs = 3;
-									multdemuxs = 3;
-								end
-								EX5: begin //CH << 8
-									multmuxas = 1;
-									multmuxbs = 0;
-									multdemuxs = 1;
-								end
-								EX6: begin //CG << 16
-									multmuxas = 1;
-									multmuxbs = 1;
-									multdemuxs = 2;
-								end
-								EX7: begin //CF << 24
-									multmuxas = 1;
-									multmuxbs = 2;
-									multdemuxs = 3;
-								end
-								EX8: begin //CE << 32
-									multmuxas = 1;
-									multmuxbs = 3;
-									multdemuxs = 4;
-								end
-								EX9: begin //BH << 16
-									multmuxas = 2;
-									multmuxbs = 0;
-									multdemuxs = 2;
-								end
-								EX10: begin //BG << 24
-									multmuxas = 2;
-									multmuxbs = 1;
-									multdemuxs = 3;
-								end
-								EX11: begin //BF << 32
-									multmuxas = 2;
-									multmuxbs = 2;
-									multdemuxs = 4;
-								end
-								EX12: begin //BE << 40
-									multmuxas = 2;
-									multmuxbs = 3;
-									multdemuxs = 5;
-								end
-								EX13: begin //AH << 24
-									multmuxas = 3;
-									multmuxbs = 0;
-									multdemuxs = 3;
-								end
-								EX14: begin //AG << 32
-									multmuxas = 3;
-									multmuxbs = 1;
-									multdemuxs = 4;
-								end
-								EX15: begin //AF << 40
-									multmuxas = 3;
-									multmuxbs = 2;
-									multdemuxs = 5;
-								end
-								EX16: begin //AE << 48
-									multmuxas = 3;
-									multmuxbs = 3;
-									multdemuxs = 6;
-								end
-								EX17: begin
-									alumuls = 1;
-									idone = 1;
-									regwe = 1;
-								end
-								default:
-									regwe = 0;
-							endcase
-						default:
-							begin
-								multmuxas = 0;
-								multmuxbs = 0;
-								templatch = 0;
-								resetmult = 0;
-							end
-					endcase
+						4'b0000: //MULQW
+						4'b0001: //MULHW
+						4'b0010: //MULW
 				4'b0010:
 					case (currenti[15:12])
 						4'b0000: //BREQ
