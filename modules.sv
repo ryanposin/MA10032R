@@ -329,7 +329,10 @@ module ma10k_frontend (input wire clk, input wire reset, input wire[31:0] ins, o
 				etrack <= EXSTALL;
 
 			case (etrack)
-			EXSTALL:
+			EXSTALL: if (dispatch)
+					etrack <= EX0;
+				else
+					etrack <= EXSTALL;
 			EX0:	if (idone)
 					etrack <= EXSTALL;
 				else
@@ -560,25 +563,6 @@ module ma10k_frontend (input wire clk, input wire reset, input wire[31:0] ins, o
 									regwe = 0;
 							endcase
 						4'b0010:
-						//ABCD
-						//0 = D
-						//1 = C
-						//2 = B
-						//3 = A
-						//
-						//EFGH
-						//0 = H
-						//1 = G
-						//2 = F
-						//3 = E
-						//
-						// << 0 - 0
-						// << 8 - 1
-						// << 16 - 2
-						// << 24 - 3
-						// << 32 - 4
-						// << 40 - 5
-						// << 48 - 6
 							case (etrack)
 								EX0: begin
 									pbmuxsel = 4'b00;
@@ -649,7 +633,7 @@ module ma10k_frontend (input wire clk, input wire reset, input wire[31:0] ins, o
 								EX13: begin //AH << 24
 									multmuxas = 3;
 									multmuxbs = 0;
-									multdemuxs 3;
+									multdemuxs = 3;
 								end
 								EX14: begin //AG << 32
 									multmuxas = 3;
@@ -675,14 +659,52 @@ module ma10k_frontend (input wire clk, input wire reset, input wire[31:0] ins, o
 									regwe = 0;
 							endcase
 						default:
+							begin
+								multmuxas = 0;
+								multmuxbs = 0;
+								templatch = 0;
+								resetmult = 0;
+							end
 					endcase
 				4'b0010:
-					case (etrack)
-						EX0:
+					case (currenti[15:12])
+						4'b0000: //BREQ
+						4'b0001: //BRNEQ
+						4'b0010: //BRLT
+						4'b0011: //BRLTEQ
+						4'b0100: //JUMPREL
+						4'b0101: //JUMPA
+						4'b0110: //JUMPR
+						4'b0111: //JUMPI
+						4'b1000: //CALL
+						4'b1001: //RET
 						default:
 					endcase
 				4'b0011:
+					case(currenti[15:12])
+						4'b0000: //LRR
+						4'b0001: //LRI
+						4'b0010: //LRA
+						4'b0011: //LUI
+						4'b0100: //LLI
+						4'b0101: //STA
+						4'b0110: //STR
+						4'b0111: //STI
+						4'b1000: //LOFST
+						4'b1001: //SOFST
+						4'b1010: //PUSH
+						4'b1011: //POP
+						4'b1100: //LL
+						4'b1101: //SC
+						default:
+					endcase
 				4'b0111:
+					case(currenti[15:12])
+						4'b0000: //PRG
+						4'b0001: //RESPSP
+						4'b0010: //SSYS
+						4'b0011: //GSYS
+					endcase
 				default:
 			endcase
 		end
