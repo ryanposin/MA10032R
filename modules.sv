@@ -58,39 +58,8 @@ module alumod (input wire[2:0] s, input wire m, input wire[31:0] a, input wire[3
 						//Arithmetic
 						3'b000:	dout = a - b;
 						3'b001:	dout = a + b;
-						3'b010:	case (shiftamt) //Shift left w/o carry
-									0: dout = a << 1;
-									1: dout = a << 2;
-									3: dout = a << 4;
-									7: dout = a << 8;
-									15: dout = a << 16;
-									default: dout = 32'b0;
-								endcase
-	
-						3'b011:	case (shiftamt) //Shift right w/o carry
-									0: dout = a >> 1;
-									1: dout = a >> 2;
-									3: dout = a >> 4;
-									7: dout = a << 8;
-									15: dout = a >> 16;
-									default: dout = 32'b0;
-								endcase							
-						3'b100:	case (shiftamt) //Rotate right w/o carry
-									0: dout = {a[0],a[31:1]};
-									1: dout = {a[1:0],a[31:2]};
-									3: dout = {a[3:0],a[31:4]};
-									7: dout = {a[7:0],a[31:8]};
-									15: dout = {a[15:0],a[31:16]};
-									default: dout = 32'b0;
-								endcase
-						3'b101:	case (shiftamt) //Rotate left w/o carry
-									0: dout = {a[30:0],a[31]};
-									1: dout = {a[29:0],a[31:30]};
-									3: dout = {a[27:0],a[31:28]};
-									7: dout = {a[23:0],a[31:24]};
-									15: dout = {a[15:0],a[31:16]};
-									default: dout = 32'b0;
-								endcase
+						3'b010: dout = a;
+						3'b011: dout = b;
 						default:	dout = 0; 
 					endcase
 				1'b1:
@@ -110,24 +79,125 @@ module alumod (input wire[2:0] s, input wire m, input wire[31:0] a, input wire[3
 		end
 endmodule
 
-module multiplier_unit (input wire clk, input wire[31:0] a, input wire[31:0] b, input wire templatch, input wire[1:0] muxas, input wire[1:0] muxbs, input wire[1:0] demuxs, input wire endmux, input wire accumulate, output logic[31:0] multout);
+//Shifter unit
+//Inputs: clk, reset, shifttype, shiftamt
+//Outputs: stalldispatch, shiftdone, shiftout
+module shifter_unit(input wire clk, input wire reset, input wire[1:0] shifttype, input wire[4:0] shiftamt, output logic stalldispatch, output logic shiftdone, output logic[31:0] shiftout);
+	logic[1:0] currentshiftamount;
+	logic[4:0] shiftstate;
+	localparam WAIT = 0;
+	localparam SH16 = 5'b10000;
+	localparam SH8 = 5'b01000;
+	localparam SH4 = 5'b00100;
+	localparam SH2 = 5'b00010;
+	localparam SH1 = 5'b00001;
+
+	always_ff @(posedge clk)
+		if (reset)
+			begin
+				stalldispatch <= 0;
+				shiftstate <= WAIT;
+				currentshiftamount <= 0;
+			end
+
+		case (shiftstate)
+			STALL: if (shiften)
+				begin
+					stalldispatch <= 1;
+					shiftout <= a;
+					case (shiftamt)
+						'b1XXXX: shiftstate <= SH16L
+						'b01XXX: shiftstate <= SH8;
+						'b001XX: shiftstate <= SH4;
+						'b0001X: shiftstate <= SH2;
+						'b00001: shiftstate <= SH1;
+						default: shiftstate <= SDONE;
+					endcase
+				end
+			SH16:	case(shiftamt[3:0])
+					'b1XXX: shiftstate <= SH8;
+					'b01XX: shiftstate <= SH4;
+					'b001X: shiftstate <= SH2;
+					'b0001: shiftstate <= SH1;
+					default: shiftstate <= SDONE;
+				endcase
+			SH8:	case(shiftamt[2:0]
+					'b1XX: shiftstate <= SH4;
+					'b01X: shiftstate <= SH2;
+					'b001: shiftstate <= SH1;
+					default: shiftstate <= SDONE;
+				endcase
+			SH4:	case(shiftamt[1:0])
+					'b1X: shiftstate <= SH2;
+					'b01: shiftstate <= SH1;
+					default: shiftstate <= SDONE;
+				endcase
+			SH2:	case(shiftamt[0])
+					'b1: shiftstate <= SH1;
+					default: shiftstate <= SDONE;
+				endcase
+			SH1: shiftstate <= SDONE;
+			SDONE: begin
+				shiftstate <= STALL;
+				stalldispatch <= 0;
+			end
+
+	always_comb
+		begin
+			if (shiftstate == SDONE)
+				shiftdone = 1;
+			else
+				shiftdone = 0;
+
+			case(shifttype)
+				2'b00:	case (currentshiftamt) //Shift left w/o carry
+							SH1: dout = dout << 1;
+							SH2: dout = dout << 2;
+							SH4: dout = dout << 4;
+							SH8: dout = dout << 8;
+							SH16: dout = dout << 16;
+							default: dout = 32'b0;
+						endcase
+			
+				2'b01:	case (currentshiftamt) //Shift right w/o carry
+							SH1: dout = dout >> 1;
+							SH2: dout = dout >> 2;
+							SH4: dout = dout >> 4;
+							SH8: dout = dout << 8;
+							SH16: dout = dout >> 16;
+							default: dout = 32'b0;
+						endcase							
+				2'b10:	case (currentshiftamt) //Rotate right w/o carry
+							SH1: dout = {a[0],a[31:1]};
+							SH2: dout = {a[1:0],a[31:2]};
+							SH4: dout = {a[3:0],a[31:4]};
+							SH8: dout = {a[7:0],a[31:8]};
+							SH16: dout = {a[15:0],a[31:16]};
+							default: dout = 32'b0;
+						endcase
+				3'b11:	case (currentshiftamt) //Rotate left w/o carry
+							SH1: dout = {a[30:0],a[31]};
+							SH2: dout = {a[29:0],a[31:30]};
+							SH4: dout = {a[27:0],a[31:28]};
+							SH8: dout = {a[23:0],a[31:24]};
+							SH16: dout = {a[15:0],a[31:16]};
+							default: dout = 32'b0;
+						endcase
+				endcase
+	end
+
+
+endmodule
+
+module multiplier_unit (input wire clk, input wire[31:0] a, input wire[31:0] b, input wire[1:0] muxas, input wire[1:0] muxbs, input wire[2:0] demuxs, input wire highlow, input wire accumulate, output logic[31:0] multout);
 	
-	logic[31:0] ffa;
-	logic[31:0] ffb;
 	logic[7:0] multina;
 	logic[7:0] multinb;
 	logic[15:0] multtempout;
-	logic[31:0] demux;
-	logic[7:0] carrybuf;
-	logic[31:0] productreg;
+	logic[63:0] demux;
+	logic[63:0] productreg;
 	logic carry;
 
-	//Input flip flop latch
-	always_ff @(posedge templatch)
-			begin
-				ffa <= a;
-				ffb <= b;
-			end
 	//8x8 multiplier input MUXes 
 	always_comb
 		begin
@@ -135,34 +205,33 @@ module multiplier_unit (input wire clk, input wire[31:0] a, input wire[31:0] b, 
 			//01 - 15:8
 			//10 - 23:16
 			//11 - 31:24
-			multina = muxas[1] ? (muxas[0] ? ffa[31:24] : ffa[23:16]) : (muxas[0] ? ffa[15:8] : ffa[7:0]);   
-			multinb = muxbs[1] ? (muxbs[0] ? ffb[31:24] : ffb[23:16]) : (muxbs[0] ? ffb[15:8] : ffb[7:0]); 
+			multina = muxas[1] ? (muxas[0] ? a[31:24] : a[23:16]) : (muxas[0] ? a[15:8] : a[7:0]);   
+			multinb = muxbs[1] ? (muxbs[0] ? b[31:24] : b[23:16]) : (muxbs[0] ? b[15:8] : b[7:0]); 
 		end
 
 	assign multtempout = multina * multinb; //Multiply
 	
-	//Demux multiplier to 32 bit register
+	//Demux multiplier to 64 bit register
 	always_comb
 		case (demuxs)
-			2'b00: demux = {16'b0, multtempout};
-			2'b01: demux = {8'b0, multtempout, 8'b0};
-			2'b10: demux = {multtempout, 16'b0};
-			2'b11: demux = {multtempout[7:0], 24'b0};
+			3'b000: demux = {48'b0, multtempout};
+			3'b001: demux = {40'b0, multtempout, 8'b0};
+			3'b010: demux = {32'b0,multtempout, 16'b0};
+			3'b011: demux = {24'b0,multtempout, 24'b0};
+			3'b100: demux = {16'b0,multtempout, 32'b0};
+			3'b101: demux = {8'b0, multtempout, 40'b0};
+			3'b110: demux = {multtempout,48'b0};
 		endcase
 	
-	//Carry for 64 bit product
-	always_latch
-		if (demuxs == 2'b11)
-				carrybuf = multtempout[15:8];
-	
 	//Accumulate
-	always_ff @(posedge clk)
+	always_ff @(negedge clk)
 		begin
 			if (accumulate)
-				{carry,productreg} <= endmux ? (productreg + demux) : ({24'b0, carrybuf} + demux + carry);
+				productreg <= productreg + demux;
+			if (reset)
+				productreg <= 0;
 		end
-	always multout = productreg;
-	
+	always multout = highlow ? productreg[63:32] : productreg[31:0];
 endmodule
 
 
