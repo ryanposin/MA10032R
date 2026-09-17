@@ -516,7 +516,131 @@ endmodule
 //Decoder
 //Inputs: instruction
 //Outputs: icode[18]
-module ma10k_frontend(input logic[31:0] instruction, output logic[21:0] icode[18]);
+module ma10k_frontend(input logic[31:0] instruction, output logic[21:0] icode[17:0]);
+
+	//ALU and shift
+	localparam SUB = 8'h00;
+	localparam ADD = 8'h01;
+	localparam SHL = 8'h02;
+	localparam SHR = 8'h03;
+	localparam ASR = 8'h04;
+	localparam ROTL = 8'h06;
+	localparam ROTR = 8'h07;
+	localparam NOT = 8'h08;
+	localparam AND = 8'h09;
+	localparam OR = 8'h0A;
+	localparam XOR = 8'h0B;
+	localparam NAND = 8'h0C;
+	localparam NOR = 8'h0D;
+	localparam XNOR = 8'h0E;
+	localparam SUP = 8'h0F;
+	
+	//Immediate math
+	localparam SUBI = 8'h80;
+	localparam ADDI = 8'h81;
+
+	//Multiplication
+	localparam MULTQW = 8'h10;
+	localparam MULTHW = 8'h11;
+	localparam MULTW = 8'h12;
+
+	//Branch and jump
+	localparam BREQ = 8'h20;
+	localparam BRNEQ = 8'h21;
+	localparam BRLT = 8'h22;
+	localparam BRLTEQ = 8'h23;
+	localparam JUMPREL = 8'h24;
+	localparam JUMPR = 8'h26;
+	localparam JUMPI = 8'h27;
+	localparam CALL = 8'h28;
+	localparam RET = 8'h29;
+
+	//Load/store/stack
+	localparam LRR = 8'h30;
+	localparam LRI = 8'h31;
+	localparam LSPR = 8'h32;
+	localparam LUI = 8'h33;
+	localparam LLI = 8'h34;
+	localparam SSPR = 8'h35;
+	localparam STR = 8'h36;
+	localparam STI = 8'h37;
+	localparam LREL = 8'h38;
+	localparam SREL = 8'h39;
+	localparam PUSH = 8'h3A;
+	localparam POP = 8'h3B;
+	localparam STQW = 8'h3C;
+	localparam LDQW = 8'h3D;
+	localparam STHW = 8'h3E;
+	localparam LDHW = 8'h3F;
+
+	//Supervisor instructions
+	localparam PRG = 8'h70;
+	localparam RESPSP = 8'h71;
+	localparam SCOP = 8'h72;
+	localparam GCOP = 8'h73;
+	localparam EI = 8'h74;
+	localparam DI = 8'h75;
+	localparam GPTIMER = 8'h76;
+	localparam RESET = 8'h77;
+	logic[31:0] microcode[150];
+	initial $readmemh(microcode.txt, microcode);
+
+	always_comb
+		case (instruction[19:12])
+			SUB:
+			ADD:
+			SHL:
+			SHR:
+			ASR:
+			ROTL:
+			ROTR:
+			NOT:
+			AND:
+			OR:
+			XOR:
+			NAND:
+			NOR:
+			XNOR:
+			SUP:
+			SUBI:
+			ADDI:
+			MULTQW:
+			MULTHW:
+			MULTW:
+			BREQ:
+			BRNEQ:
+			BRLT:
+			BRLTEQ:
+			JUMPREL:
+			JUMPR:
+			JUMPI:
+			CALL:
+			RET:
+			LRR:
+			LRI:
+			LSPR:
+			LUI:
+			LLI:
+			SSPR:
+			STR:
+			STI:
+			LREL:
+			SREL:
+			PUSH:
+			POP:
+			STQW:
+			LDQW:
+			STHW:
+			LDHW:
+			PRG:
+			RESPSP:
+			SCOP:
+			GCOP:
+			EI:
+			DI:
+			GPTIMER:
+			RESET:
+		end
 endmodule
 
 //Pipeline break
@@ -538,13 +662,20 @@ endmodule
 //Execution unit
 //Inputs: clk, reset, funcsel, ina, inb, icode[18]
 //Outputs: execout, stalldispatch
-module execute_unit(input logic clk, input logic[1:0] funcsel, input logic[31:0] ina, input logic[31:0] inb, input logic[21:0] icode[18], output logic[31:0] execout, output logic stalldispatch);
+module execute_unit(input logic clk, input logic[1:0] funcsel, input logic[31:0] ina, input logic[31:0] inb, input logic[21:0] icode[17:0], output logic[31:0] execout, output logic stalldispatch);
+	
+	logic[4:0] executec;
+	always_ff @(posedge clk)
+		if(icode[executec][])
+
+		else
+			executec = 0;
 	always_comb
 		case (funcsel)
 			2'b00: begin
 				execout = aluout;
-				alufuncsel = icode[executec][];
-				alufunctype = icode[executec][];
+				alufuncsel = icode[0][];
+				alufunctype = icode[0][];
 			end
 			2'b01: begin
 				execout = multout;
