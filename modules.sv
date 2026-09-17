@@ -171,6 +171,15 @@ endmodule
 //Outputs: validaddr, validdata, read, write, toexec, toprefetch, memwait
 //Inout: adbus, memdata
 module busunit(input logic clk, input logic reset, input logic qfull, input logic memreq, input logic[31:0] memaddr, output logic validaddr, output logic validdata, output logic read, output logic write, output logic[31:0] toexec, output logic[31:0] toprefetch, output logic memwait, inout logic[31:0] adbus, inout logic[31:0] memdata);
+
+	always_ff @(posedge clk)
+		begin
+			if (reset)
+				begin
+
+				end
+		end
+
 endmodule
 
 //Prefetch unit
