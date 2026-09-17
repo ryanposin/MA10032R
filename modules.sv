@@ -93,57 +93,71 @@ module shifter_unit(input wire clk, input wire reset, input wire[1:0] shifttype,
 	localparam SH1 = 6'b000001;
 	localparam SDONE = 6'b100000;
 	always_ff @(posedge clk)
-	begin
-		if (reset)
-			begin
-				stalldispatch <= 0;
-				shiftstate <= WAIT;
-				currentshiftamount <= 0;
-			end
-
-		case (shiftstate)
-			STALL: if (shiften)
+		begin
+			if (reset)
 				begin
-					stalldispatch <= 1;
-					shiftout <= a;
-					case (shiftamt)
-						5'b01XXXX: shiftstate <= SH16L
-						5'b001XXX: shiftstate <= SH8;
-						5'b0001XX: shiftstate <= SH4;
-						5'b00001X: shiftstate <= SH2;
-						5'b000001: shiftstate <= SH1;
-						default: shiftstate <= SDONE;
-					endcase
+					stalldispatch <= 0;
+					shiftstate <= WAIT;
+					currentshiftamount <= 0;
 				end
-			SH16:	case(shiftamt[3:0])
-					'b1XXX: shiftstate <= SH8;
-					'b01XX: shiftstate <= SH4;
-					'b001X: shiftstate <= SH2;
-					'b0001: shiftstate <= SH1;
-					default: shiftstate <= SDONE;
-				endcase
-			SH8:	case(shiftamt[2:0]
-					'b1XX: shiftstate <= SH4;
-					'b01X: shiftstate <= SH2;
-					'b001: shiftstate <= SH1;
-					default: shiftstate <= SDONE;
-				endcase
-			SH4:	case(shiftamt[1:0])
-					'b1X: shiftstate <= SH2;
-					'b01: shiftstate <= SH1;
-					default: shiftstate <= SDONE;
-				endcase
-			SH2:	case(shiftamt[0])
-					'b1: shiftstate <= SH1;
-					default: shiftstate <= SDONE;
-				endcase
-			SH1: shiftstate <= SDONE;
-			SDONE: begin
-				shiftstate <= STALL;
-				stalldispatch <= 0;
-			end
-		endcase
-	end
+
+			case (shiftstate)
+				WAIT: if (shiften)
+					begin
+						stalldispatch <= 1;
+						shiftout <= a;
+						if (shiftamount[4] == 1'b1)
+							shiftstate <= SH16;
+						else if (shiftamount[4:3] == 2'b01)
+							shiftstate <= SH8;
+						else if (shiftamount[4:2] == 3'b001)
+							shiftstate <= SH4;
+						else if (shiftamount[4:1] == 4'b0001)
+							shiftstate <= SH2;
+						else if (shiftamount[4:0] == 5'b00001)
+							shiftstate <= SH1;
+						else
+							shiftstate <= SDONE;
+					end
+
+				SH16:	if (shiftamount[3] == 1'b1)
+						shiftstate <= SH8;
+					else if (shiftamount[3:2] == 2'b01)
+						shiftstate <= SH4;
+					else if (shiftamount[3:1] == 3'b001)
+						shiftstate <= SH2;
+					else if (shiftamount[3:0] == 4'b0001)
+						shiftstate <= SH1;
+					else
+						shiftstate <= SDONE;
+
+				SH8:	if (shiftamount[2] == 1'b1)
+						shiftstate <= SH4;
+					else if (shiftamount[2:1] == 2'b01)
+						shiftstate <= SH2;
+					else if (shiftamount[2:0] == 3'b001)
+						shiftstate <= SH1;
+					else
+						shiftstate <= SDONE;
+
+				SH4:	if (shiftamount[1] == 1'b1)
+						shiftstate <= SH2;
+					else if (shiftamount[1:0] == 2'b01)
+						shiftstate <= SH1;
+					else
+						shiftstate <= SDONE;
+
+				SH2:	if (shiftamt[0])
+						shiftstate <= SH1;
+					else
+						shiftstate <= SDONE;
+				SH1: shiftstate <= SDONE;
+				SDONE: begin
+					shiftstate <= WAIT;
+					stalldispatch <= 0;
+				end
+			endcase
+		end
 
 	always_comb
 		begin
@@ -294,18 +308,21 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 				read = 0;
 				write = 1;
 			end
-			OUTPUTDATA:
-				adbus = memdata;
-				validaddr = 0;
-				validdata = 1;
-				read = 0;
-				write = 1;
-			LATCHDATA:
-				memdata = adbus;
-				validaddr = 0;
-				validdata = 1;
-				read = 1;
-				write = 0;
+			OUTPUTDATA: begin
+					adbus = memdata;
+					validaddr = 0;
+					validdata = 1;
+					read = 0;
+					write = 1;
+				end
+			LATCHDATA: begin
+					memdata = adbus;
+					validaddr = 0;
+					validdata = 1;
+					read = 1;
+					write = 0;
+				end
+			endcase
 		end
 
 endmodule
@@ -330,7 +347,7 @@ module prefetcher(input logic clk, input logic reset, input logic instreq, input
 			if (reset)
 				begin
 					ftrack <= QEMPTY;
-					instqcount[5:0] <= {'b111,'b111,'b111,'b111,'b111,'b111};
+					instqcount[5:0][2:0] <= {'b111,'b111,'b111,'b111,'b111,'b111};
 					instq[5:0] <= {0,0,0,0,0,0};
 				end
 			case (ftrack)
@@ -515,6 +532,7 @@ module pipebreak(input logic clk, input logic reset, input logic stall, input lo
 					{icodefunc, afunc, bfunc, regtowritefunc} <= {icodefunc, afunc, bfunc, regtowritefunc};
 				else 
 					{icodefunc, afunc, bfunc, regtowritefunc} <= {icode, a, b, regtowrite};
+		end
 endmodule
 
 //Execution unit
@@ -541,6 +559,7 @@ module execute_unit(input logic clk, input logic[1:0] funcsel, input logic[31:0]
 			2'b10: begin
 				execout = shiftout;
 				stalldispatch = ~shiftdone;
+			end
 			default: execout = 0;
 		endcase
 
@@ -554,17 +573,19 @@ endmodule
 //Outputs: dbusreq, dbusdir, addr, towriteback, stalldispatch 
 //Inout: data
 module mem_access_unit(input logic[31:0] fromexecute, input logic[31:0] portb, input logic addrsel, input logic datasel, input logic requestdbus, input logic dbusreqdir, input logic buswait, output logic dbusreq, output logic dbusdir, output logic[31:0] addr, output logic[31:0] towriteback, output logic stalldispatch, inout logic[31:0] data);
-	assign dbusreq = requestdbus;
-	assign dbusdir = dbusreqdir;
-	assign addr = requestdbus ? (addrsel ? portb : fromexecute) : 32'hZ;
-	assign towriteback = requestdbus ? ( dbusreqdir ? 32'hZ : data) : fromexecute;
-	assign data = requestdbus ? (datasel ? portb : fromexecute) : 32'hZ;
-	
 	always_comb
-		if (requestdbus)
-			stalldispatch = buswait;
-		else
-			stalldispatch = 0;
+		begin
+			dbusreq = requestdbus;
+			dbusdir = dbusreqdir;
+			addr = requestdbus ? (addrsel ? portb : fromexecute) : 32'hZ;
+			towriteback = requestdbus ? ( dbusreqdir ? 32'hZ : data) : fromexecute;
+			data = requestdbus ? (datasel ? portb : fromexecute) : 32'hZ;
+		
+			if (requestdbus)
+				stalldispatch = buswait;
+			else
+				stalldispatch = 0;
+		end
 endmodule
 
 
