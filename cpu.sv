@@ -1,5 +1,5 @@
 `include "modules.sv"
-
+/*
 module core(input wire reset, input wire clk, inout logic[31:0] addrdata, output logic vdata, output logic vaddr, output logic read, output logic write);
 
 	logic pspwe, sspwe, pcwe, spsel, regwe, aluoptype, lessthan, equalto, accumux, accumulate, templatch, alumuls, bushighz, busvalidaddr, busvaliddata, addroutmuxs;
@@ -35,4 +35,4 @@ module core(input wire reset, input wire clk, inout logic[31:0] addrdata, output
 	//Insert pipeline stage here
 
 endmodule
-
+*/

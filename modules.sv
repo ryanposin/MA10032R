@@ -86,13 +86,14 @@ module shifter_unit(input wire clk, input wire reset, input wire[1:0] shifttype,
 	logic[1:0] currentshiftamount;
 	logic[4:0] shiftstate;
 	localparam WAIT = 0;
-	localparam SH16 = 5'b10000;
-	localparam SH8 = 5'b01000;
-	localparam SH4 = 5'b00100;
-	localparam SH2 = 5'b00010;
-	localparam SH1 = 5'b00001;
-
+	localparam SH16 = 6'b010000;
+	localparam SH8 = 6'b001000;
+	localparam SH4 = 6'b000100;
+	localparam SH2 = 6'b000010;
+	localparam SH1 = 6'b000001;
+	localparam SDONE = 6'b100000;
 	always_ff @(posedge clk)
+	begin
 		if (reset)
 			begin
 				stalldispatch <= 0;
@@ -106,11 +107,11 @@ module shifter_unit(input wire clk, input wire reset, input wire[1:0] shifttype,
 					stalldispatch <= 1;
 					shiftout <= a;
 					case (shiftamt)
-						'b1XXXX: shiftstate <= SH16L
-						'b01XXX: shiftstate <= SH8;
-						'b001XX: shiftstate <= SH4;
-						'b0001X: shiftstate <= SH2;
-						'b00001: shiftstate <= SH1;
+						5'b01XXXX: shiftstate <= SH16L
+						5'b001XXX: shiftstate <= SH8;
+						5'b0001XX: shiftstate <= SH4;
+						5'b00001X: shiftstate <= SH2;
+						5'b000001: shiftstate <= SH1;
 						default: shiftstate <= SDONE;
 					endcase
 				end
@@ -141,6 +142,8 @@ module shifter_unit(input wire clk, input wire reset, input wire[1:0] shifttype,
 				shiftstate <= STALL;
 				stalldispatch <= 0;
 			end
+		endcase
+	end
 
 	always_comb
 		begin
@@ -184,9 +187,7 @@ module shifter_unit(input wire clk, input wire reset, input wire[1:0] shifttype,
 							default: dout = 32'b0;
 						endcase
 				endcase
-	end
-
-
+		end
 endmodule
 
 module multiplier_unit (input wire clk, input wire[31:0] a, input wire[31:0] b, input wire[1:0] muxas, input wire[1:0] muxbs, input wire[2:0] demuxs, input wire highlow, input wire accumulate, output logic[31:0] multout);
@@ -270,8 +271,8 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 							busstate <= LATCHDATA;
 				OUTPUTDATA: busstate <= HIGHZ;
 				LATCHDATA: busstate <= HIGHZ;
-		end
-	
+			endcase
+		end	
 	always_comb
 		begin
 			case(busstate)
@@ -386,7 +387,7 @@ module prefetcher(input logic clk, input logic reset, input logic instreq, input
 							instqcount[0] <= 3'b111;
 							tofetch <= instq[0];
 						end
-					else if (instqcount[0] ~= 0 | instqcount[0] ~= 111)
+					else if (instqcount[0] != 0 | instqcount[0] != 111)
 						instqcount[0] <= instqcount[0] - 1;
 				
 					if (instqcount[1] == 0)
@@ -394,7 +395,7 @@ module prefetcher(input logic clk, input logic reset, input logic instreq, input
 							instqcount[1] <= 3'b111;
 							tofetch <= instq[1];
 						end
-					else if (instqcount[1] ~= 0 | instqcount[1] ~= 111)
+					else if (instqcount[1] != 0 | instqcount[1] != 111)
 						instqcount[1] <= instqcount[1] - 1;
 
 					if (instqcount[2] == 0)
@@ -402,7 +403,7 @@ module prefetcher(input logic clk, input logic reset, input logic instreq, input
 							instqcount[2] <= 3'b111;
 							tofetch <= instq[2];
 						end
-					else if (instqcount[2] ~= 0 | instqcount[2] ~= 111)
+					else if (instqcount[2] != 0 | instqcount[2] != 111)
 						instqcount[2] <= instqcount[2] - 1;
 
 					if (instqcount[3] == 0)
@@ -410,7 +411,7 @@ module prefetcher(input logic clk, input logic reset, input logic instreq, input
 							instqcount[3] <= 3'b111;
 							tofetch <= instq[3];
 						end
-					else if (instqcount[3] ~= 0 | instqcount[3] ~= 111)
+					else if (instqcount[3] != 0 | instqcount[3] != 111)
 						instqcount[3] <= instqcount[3] - 1;
 
 					if (instqcount[4] == 0)
@@ -418,7 +419,7 @@ module prefetcher(input logic clk, input logic reset, input logic instreq, input
 							instqcount[4] <= 3'b111;
 							tofetch <= instq[4];
 						end
-					else if (instqcount[4] ~= 0 | instqcount[4] ~= 111)
+					else if (instqcount[4] != 0 | instqcount[4] != 111)
 						instqcount[4] <= instqcount[4] - 1;
 
 					if (instqcount[5] == 0)
@@ -426,7 +427,7 @@ module prefetcher(input logic clk, input logic reset, input logic instreq, input
 							instqcount[5] <= 3'b111;
 							tofetch <= instq[5];
 						end
-					else if (instqcount[5] ~= 0 | instqcount[5] ~= 111)
+					else if (instqcount[5] != 0 | instqcount[5] != 111)
 						instqcount[5] <= instqcount[5] - 1;
 
 				end
