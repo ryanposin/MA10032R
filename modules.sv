@@ -236,17 +236,75 @@ endmodule
 
 
 //Bus unit
-//Inputs: clk, reset, qfull, memreq, memaddr
-//Outputs: validaddr, validdata, read, write, toexec, toprefetch, memwait
+//Inputs: clk, reset, qfull, memreq, memreqdir, memaddr, programcounter
+//Outputs: validaddr, validdata, read, write, toexec, incprefetch, toprefetch, memwait
 //Inout: adbus, memdata
-module busunit(input logic clk, input logic reset, input logic qfull, input logic memreq, input logic[31:0] memaddr, output logic validaddr, output logic validdata, output logic read, output logic write, output logic[31:0] toexec, output logic[31:0] toprefetch, output logic memwait, inout logic[31:0] adbus, inout logic[31:0] memdata);
+module busunit(input logic clk, input logic reset, input logic qfull, input logic memreq, input logic memreqdir, input logic[31:0] memaddr, input logic[31:0] programcounter, output logic validaddr, output logic validdata, output logic read, output logic write, output logic[31:0] toexec, output logic incprefetch, output logic[31:0] toprefetch, output logic memwait, inout logic[31:0] adbus, inout logic[31:0] memdata);
+
+	logic[2:0] busstate;
+	localparam HIGHZ = 0;
+	localparam OUTPUTPC = 1;
+	localparam LATCHINST = 2;
+	localparam OUTPUTMEM = 3;
+	localparam OUTPUTDATA = 4;
+	localparam LATCHDATA = 5;
 
 	always_ff @(posedge clk)
 		begin
 			if (reset)
 				begin
-
+					busstate <= HIGHZ;
 				end
+			case (busstate)
+				HIGHZ: if (~memreq & qfull)
+						busstate <= HIGHZ;
+					else if (~memreq & ~qfull)
+						busstate <= OUTPUTPC;
+					else if (memreq)
+						busstate <= OUTPUTMEM;
+				OUTPUTPC: busstate <= LATCHINST;
+				LATCHINST: busstate <= HIGHZ;
+				OUTPUTMEM:	if (memreqdir) //1 = output
+							busstate <= OUTPUTDATA;
+						else //0 = input
+							busstate <= LATCHDATA;
+				OUTPUTDATA: busstate <= HIGHZ;
+				LATCHDATA: busstate <= HIGHZ;
+		end
+	
+	always_comb
+		begin
+			case(busstate)
+			HIGHZ: adbus = 'hZ;
+			OUTPUTPC: begin
+				adbus = programcounter;
+				validaddr = 1;
+				read = 1;
+			end
+			LATCHINST: begin
+					toprefetch = adbus;
+					validdata = 1;
+					read = 1;
+					incprefetch = 1;
+				end
+			OUTPUTMEM: begin
+				adbus = memaddr;
+				validaddr = 1;
+				read = 0;
+				write = 1;
+			end
+			OUTPUTDATA:
+				adbus = memdata;
+				validaddr = 0;
+				validdata = 1;
+				read = 0;
+				write = 1;
+			LATCHDATA:
+				memdata = adbus;
+				validaddr = 0;
+				validdata = 1;
+				read = 1;
+				write = 0;
 		end
 
 endmodule
