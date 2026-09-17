@@ -167,22 +167,101 @@ endmodule
 
 
 //Bus unit
-//Inputs: clk, reset, qfull, todata, memreq
-//Outputs: validaddr, validdata, read, write, toexec, toprefetch
-//Inout: adbus
-module bunit(input logic clk, input logic reset, input logic qfull, input logic memreq, input logic[31:0] todata, output logic validaddr, output logic validdata, output logic read, output logic write, output logic[31:0] toexec, output logic[31:0] toprefetch, inout logic[31:0] adbus);
+//Inputs: clk, reset, qfull, memreq, memaddr
+//Outputs: validaddr, validdata, read, write, toexec, toprefetch, memwait
+//Inout: adbus, memdata
+module busunit(input logic clk, input logic reset, input logic qfull, input logic memreq, input logic[31:0] memaddr, output logic validaddr, output logic validdata, output logic read, output logic write, output logic[31:0] toexec, output logic[31:0] toprefetch, output logic memwait, inout logic[31:0] adbus, inout logic[31:0] memdata);
 endmodule
 
 //Prefetch unit
-//Inputs: clk, reset, instreq, insttoadd
+//Inputs: clk, reset, instreq, instadd, insttoadd
 //Outputs: qfull, tofetch
-module prefetcher(input logic clk, input logic reset, input logic instreq, input logic[31:0] insttoadd, output logic qfull, output logic[31:0] tofetch);
+module prefetcher(input logic clk, input logic reset, input logic instreq, input logic instadd, input logic[31:0] insttoadd, output logic qfull, output logic[31:0] tofetch);
+	logic[2:0] ftrack;
+	localparam QEMPTY = 0;
+	localparam Q1 = 1;
+	localparam Q2 = 2;
+	localparam Q3 = 3;
+	localparam Q4 = 4;
+	localparam Q5 = 5;
+	localparam QFULL = 6;
+
+	always_ff @(posedge clk)
+		begin
+			case (ftrack)
+			QEMPTY: if (instreq & instadd | ~instreq & ~instadd)
+					ftrack <= QEMPTY;
+				else if (instadd & ~instreq)
+					ftrack <= Q1;
+			Q1:	if (instreq & instadd | ~instreq & ~instadd)
+					ftrack <= Q1;
+				else if (instadd & ~instreq)
+					ftrack <= Q2;
+				else if (~instadd & instreq)
+					ftrack <= QEMPTY;
+			Q2:
+				if (instreq & instadd | ~instreq & ~instadd)
+					ftrack <= Q2;
+				else if (instadd & ~instreq)
+					ftrack <= Q3;
+				else if (~instadd & instreq)
+					ftrack <= Q1;
+			Q3:
+				if (instreq & instadd | ~instreq & ~instadd)
+					ftrack <= Q3;
+				else if (instadd & ~instreq)
+					ftrack <= Q4;
+				else if (~instadd & instreq)
+					ftrack <= Q2;
+			Q4:
+				if (instreq & instadd | ~instreq & ~instadd)
+					ftrack <= Q4;
+				else if (instadd & ~instreq)
+					ftrack <= Q5;
+				else if (~instadd & instreq)
+					ftrack <= Q3;
+			Q5:
+				if (instreq & instadd | ~instreq & ~instadd)
+					ftrack <= Q5;
+				else if (instadd & ~instreq)
+					ftrack <= QFULL;
+				else if (~instadd & instreq)
+					ftrack <= Q4;
+			QFULL:
+				if (instreq & instadd | ~instreq & ~instadd)
+					ftrack <= QFULL;
+				else if (~instadd & instreq)
+					ftrack <= Q5;
+		end
 endmodule
 
 //Fetch unit
 //Inputs: clk, reset, ready, insin
 //Outputs: insout
 module fetcher(input logic clk, input logic reset, input logic ready, input logic[31:0] insin, output logic[31:0] insout);
+	logic fetchstate;
+	localparam FSTALL = 0;
+	localparam FDECODE = 1;
+
+	always_ff @(posedge clk)
+		begin
+			if (reset)
+				fetchstate <= FSTALL;
+			case (fetchstate)
+				FSTALL: if (~ready)
+						fetchstate <= FSTALL;
+					else
+						fstate <= FDECODE;
+				FDECODE:
+					begin
+						insout <= insin;
+						if (~ready)
+							fetchstate <= FSTALL;
+						else
+							fstate <= FDECODE;
+					end
+			endcase
+		end
 endmodule
 
 //Decoder
@@ -192,27 +271,68 @@ module ma10k_frontend(input logic[31:0] instruction, output logic[21:0] icode[18
 endmodule
 
 //Pipeline break
-//Inputs: clk, reset, icode[18], a, b, regtowrite
+//Inputs: clk, reset, stall, icode[18], a, b, regtowrite
 //Outputs: icodefunc, afunc, bfunc, regtowritefunc
-module pipebreak(input logic clk, input logic reset, input logic[21:0] icode[18], input logic[31:0] a, input logic[31:0] b, input logic[3:0] regtowrite, output logic[21:0] icodefunc, output logic[31:0] afunc, output logic[31:0] bfunc, output logic[3:0] regtowritefunc);
+module pipebreak(input logic clk, input logic reset, input logic stall, input logic[21:0] icode[18], input logic[31:0] a, input logic[31:0] b, input logic[3:0] regtowrite, output logic[21:0] icodefunc, output logic[31:0] afunc, output logic[31:0] bfunc, output logic[3:0] regtowritefunc);
+	always_ff @(posedge clk)
+		begin
+			if (reset)
+				{icodefunc, afunc, bfunc,regtowritefunc} <= {0,0,0,0};
+			else
+				if (stall)
+					{icodefunc, afunc, bfunc, regtowritefunc} <= {icodefunc, afunc, bfunc, regtowritefunc};
+				else 
+					{icodefunc, afunc, bfunc, regtowritefunc} <= {icode, a, b, regtowrite};
 endmodule
 
 //Execution unit
 //Inputs: clk, reset, funcsel, ina, inb, icode[18]
-//Outputs: execout
-module execute_unit(input logic clk, input logic[1:0] funcsel, input logic[31:0] ina, input logic[31:0] inb, input logic[21:0] icode[18], output logic[31:0] execout);
-	//ALU w/ shifter
-	alumod alu(aluop, aluoptype, rega, aluinb, immediate[3:0], aluout, lessthan, equalto);
-	//Multiplier
-	multiplier_unit mult(clk, rega, aluinb, templatch, multmuxas, multmuxbs, multdemuxs, accumux, accumulate, multout);	
-	ttb2inmux alumultmux(aluout, multout, alumuls, wbdata); 
-	ttb2inmux addroutput(aluinb, aluout, addroutmuxs, addrout);
+//Outputs: execout, stalldispatch
+module execute_unit(input logic clk, input logic[1:0] funcsel, input logic[31:0] ina, input logic[31:0] inb, input logic[21:0] icode[18], output logic[31:0] execout, output logic stalldispatch);
+	always_comb
+		case (funcsel)
+			2'b00: begin
+				execout = aluout;
+				alufuncsel = icode[executec][];
+				alufunctype = icode[executec][];
+			end
+			2'b01: begin
+				execout = multout;
+				templatch = icode[executec][];
+				multmuxas = icode[executec][];
+				multmuxbs = icode[executec][];
+				multdemuxs = icode[executec][];
+				accumux = icode[executec][];
+				accumulate = icode[executec][];
+				stalldispatch = ~multdone;
+			end
+			2'b10: begin
+				execout = shiftout;
+				stalldispatch = ~shiftdone;
+			default: execout = 0;
+		endcase
+
+	alumod alu(alufunc, alufunctype, ina, inb, immediate[3:0], aluout, lessthan, equalto);
+	multiplier_unit mult(clk, ina, inb, templatch, multmuxas, multmuxbs, multdemuxs, accumux, accumulate, multout);
+	shifter_unit shifter(clk, ina, immediate[4:0], shiftout);
 endmodule
 
 //Memory access unit
-//Inputs: 
-//Outputs:
-module mem_access_unit();
+//Inputs: fromexecute, portb, addrsel, datasel, requestdbus, dbusreqdir, buswait
+//Outputs: dbusreq, dbusdir, addr, towriteback, stalldispatch 
+//Inout: data
+module mem_access_unit(input logic[31:0] fromexecute, input logic[31:0] portb, input logic addrsel, input logic datasel, input logic requestdbus, input logic dbusreqdir, input logic buswait, output logic dbusreq, output logic dbusdir, output logic[31:0] addr, output logic[31:0] towriteback, output logic stalldispatch, inout logic[31:0] data);
+	assign dbusreq = requestdbus;
+	assign dbusdir = dbusreqdir;
+	assign addr = requestdbus ? (addrsel ? portb : fromexecute) : 32'hZ;
+	assign towriteback = requestdbus ? ( dbusreqdir ? 32'hZ : data) : fromexecute;
+	assign data = requestdbus ? (datasel ? portb : fromexecute) : 32'hZ;
+	
+	always_comb
+		if (requestdbus)
+			stalldispatch = buswait;
+		else
+			stalldispatch = 0;
 endmodule
 
 
