@@ -178,6 +178,8 @@ endmodule
 //Outputs: qfull, tofetch
 module prefetcher(input logic clk, input logic reset, input logic instreq, input logic instadd, input logic[31:0] insttoadd, output logic qfull, output logic[31:0] tofetch);
 	logic[2:0] ftrack;
+	logic[2:0] instqcount[6];
+	logic[31:0] instq[6];
 	localparam QEMPTY = 0;
 	localparam Q1 = 1;
 	localparam Q2 = 2;
@@ -185,53 +187,146 @@ module prefetcher(input logic clk, input logic reset, input logic instreq, input
 	localparam Q4 = 4;
 	localparam Q5 = 5;
 	localparam QFULL = 6;
-
+	
 	always_ff @(posedge clk)
 		begin
+			if (reset)
+				begin
+					ftrack <= QEMPTY;
+					instqcount[5:0] <= {'b111,'b111,'b111,'b111,'b111,'b111};
+					instq[5:0] <= {0,0,0,0,0,0};
+				end
 			case (ftrack)
-			QEMPTY: if (instreq & instadd | ~instreq & ~instadd)
-					ftrack <= QEMPTY;
-				else if (instadd & ~instreq)
-					ftrack <= Q1;
-			Q1:	if (instreq & instadd | ~instreq & ~instadd)
-					ftrack <= Q1;
-				else if (instadd & ~instreq)
-					ftrack <= Q2;
-				else if (~instadd & instreq)
-					ftrack <= QEMPTY;
-			Q2:
-				if (instreq & instadd | ~instreq & ~instadd)
-					ftrack <= Q2;
-				else if (instadd & ~instreq)
-					ftrack <= Q3;
-				else if (~instadd & instreq)
-					ftrack <= Q1;
-			Q3:
-				if (instreq & instadd | ~instreq & ~instadd)
-					ftrack <= Q3;
-				else if (instadd & ~instreq)
-					ftrack <= Q4;
-				else if (~instadd & instreq)
-					ftrack <= Q2;
-			Q4:
-				if (instreq & instadd | ~instreq & ~instadd)
-					ftrack <= Q4;
-				else if (instadd & ~instreq)
-					ftrack <= Q5;
-				else if (~instadd & instreq)
-					ftrack <= Q3;
-			Q5:
-				if (instreq & instadd | ~instreq & ~instadd)
-					ftrack <= Q5;
-				else if (instadd & ~instreq)
-					ftrack <= QFULL;
-				else if (~instadd & instreq)
-					ftrack <= Q4;
-			QFULL:
-				if (instreq & instadd | ~instreq & ~instadd)
-					ftrack <= QFULL;
-				else if (~instadd & instreq)
-					ftrack <= Q5;
+				QEMPTY:
+					if (instreq & instadd | ~instreq & ~instadd)
+						ftrack <= QEMPTY;
+					else if (instadd & ~instreq)
+						ftrack <= Q1;
+				Q1:	if (instreq & instadd | ~instreq & ~instadd)
+						ftrack <= Q1;
+					else if (instadd & ~instreq)
+						ftrack <= Q2;
+					else if (~instadd & instreq)
+						ftrack <= QEMPTY;
+				Q2:
+					if (instreq & instadd | ~instreq & ~instadd)
+						ftrack <= Q2;
+					else if (instadd & ~instreq)
+						ftrack <= Q3;
+					else if (~instadd & instreq)
+						ftrack <= Q1;
+				Q3:
+					if (instreq & instadd | ~instreq & ~instadd)
+						ftrack <= Q3;
+					else if (instadd & ~instreq)
+						ftrack <= Q4;
+					else if (~instadd & instreq)
+						ftrack <= Q2;
+				Q4:
+					if (instreq & instadd | ~instreq & ~instadd)
+						ftrack <= Q4;
+					else if (instadd & ~instreq)
+						ftrack <= Q5;
+					else if (~instadd & instreq)
+						ftrack <= Q3;
+				Q5:
+					if (instreq & instadd | ~instreq & ~instadd)
+						ftrack <= Q5;
+					else if (instadd & ~instreq)
+						ftrack <= QFULL;
+					else if (~instadd & instreq)
+						ftrack <= Q4;
+				QFULL:
+					if (instreq & instadd | ~instreq & ~instadd)
+						ftrack <= QFULL;
+					else if (~instadd & instreq)
+						ftrack <= Q5;
+			endcase
+
+			if (instreq)
+				begin
+					if (instqcount[0] == 0)
+						begin
+							instqcount[0] <= 3'b111;
+							tofetch <= instq[0];
+						end
+					else if (instqcount[0] ~= 0 | instqcount[0] ~= 111)
+						instqcount[0] <= instqcount[0] - 1;
+				
+					if (instqcount[1] == 0)
+						begin
+							instqcount[1] <= 3'b111;
+							tofetch <= instq[1];
+						end
+					else if (instqcount[1] ~= 0 | instqcount[1] ~= 111)
+						instqcount[1] <= instqcount[1] - 1;
+
+					if (instqcount[2] == 0)
+						begin
+							instqcount[2] <= 3'b111;
+							tofetch <= instq[2];
+						end
+					else if (instqcount[2] ~= 0 | instqcount[2] ~= 111)
+						instqcount[2] <= instqcount[2] - 1;
+
+					if (instqcount[3] == 0)
+						begin
+							instqcount[3] <= 3'b111;
+							tofetch <= instq[3];
+						end
+					else if (instqcount[3] ~= 0 | instqcount[3] ~= 111)
+						instqcount[3] <= instqcount[3] - 1;
+
+					if (instqcount[4] == 0)
+						begin
+							instqcount[4] <= 3'b111;
+							tofetch <= instq[4];
+						end
+					else if (instqcount[4] ~= 0 | instqcount[4] ~= 111)
+						instqcount[4] <= instqcount[4] - 1;
+
+					if (instqcount[5] == 0)
+						begin
+							instqcount[5] <= 3'b111;
+							tofetch <= instq[5];
+						end
+					else if (instqcount[5] ~= 0 | instqcount[5] ~= 111)
+						instqcount[5] <= instqcount[5] - 1;
+
+				end
+			if (instadd)
+				begin
+					if (instqcount[0] == 3'b111)
+						begin
+							instqcount[0] <= ftrack;
+							instq[0] <= insttoadd;
+						end
+					else if (instqcount[1] == 3'b111)
+						begin
+							instqcount[1] <= ftrack;
+							instq[1] <= insttoadd;
+						end
+					else if (instqcount[2] == 3'b111)
+						begin
+							instqcount[2] <= ftrack;
+							instq[2] <= insttoadd;
+						end
+					else if (instqcount[3] == 3'b111)
+						begin
+							instqcount[3] <= ftrack;
+							instq[3] <= insttoadd;
+						end
+					else if (instqcount[4] == 3'b111)
+						begin
+							instqcount[4] <= ftrack;
+							instq[4] <= insttoadd;
+						end
+					else if (instqcount[5] == 3'b111)
+						begin
+							instqcount[5] <= ftrack;
+							instq[5] <= insttoadd;
+						end
+				end
 		end
 endmodule
 
