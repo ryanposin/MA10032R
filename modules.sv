@@ -1,7 +1,17 @@
 //Special register, for SP and PC
-module special_reg (input wire[31:0] d, input wire we, output logic[31:0] q);
-	always_ff @(posedge we)
-		q <= d;
+module special_reg (input wire clk, input wire reset, input wire inc, input wire dec, input wire we, input logic[31:0] d, output logic[31:0] q);
+	always_ff @(negedge clk)
+		if (we)
+			q <= d;
+		else if (dec)
+			q <= q - 1;
+		else if (inc)
+			q <= q + 1;
+		else if (inc & dec)
+			q <= q;
+		
+		if (reset)
+			q <= 0;
 endmodule
 
 //32 bit 2:1 MUX
@@ -17,16 +27,16 @@ module ttb4inmux (input wire[31:0] i0, input wire[31:0] i1, input wire[31:0] i2,
 endmodule
 
 //Register file with hardwired ZERO register (R0), R1-R15 are general purpose 
-module regfile (input wire[3:0] portasel, input wire[3:0] portbsel, input wire[3:0] writesel, input wire we, input wire reset, input wire[31:0] writeinput, output logic[31:0] a, output logic[31:0] b);
+module regfile (input logic clk, input logic reset, input wire[3:0] portasel, input wire[3:0] portbsel, input wire[3:0] writesel, input wire we, input wire[31:0] writeinput, output logic[31:0] a, output logic[31:0] b);
 
 logic[31:0] registers[15:0];
 
-	always_ff @(posedge we | reset)
+	always_ff @(negedge clk)
 		begin
-			if (~reset)
+			if (reset)
 				registers[15:0] <= {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-			else
-				registers[writesel[3:0] + 1] <= writeinput;
+			else if (we & writesel != 0)
+				registers[writesel[3:0] <= writeinput;
 		end
 	always_comb
 		begin
@@ -252,9 +262,9 @@ endmodule
 
 //Bus unit
 //Inputs: clk, reset, qfull, memreq, memreqdir, memaddr, programcounter
-//Outputs: validaddr, validdata, read, write, toexec, incprefetch, toprefetch, memwait
+//Outputs: validaddr, validdata, read, write, incprefetch, toprefetch, memwait
 //Inout: adbus, memdata
-module busunit(input logic clk, input logic reset, input logic qfull, input logic memreq, input logic memreqdir, input logic[31:0] memaddr, input logic[31:0] programcounter, output logic validaddr, output logic validdata, output logic read, output logic write, output logic[31:0] toexec, output logic incprefetch, output logic[31:0] toprefetch, output logic memwait, inout logic[31:0] adbus, inout logic[31:0] memdata);
+module busunit(input logic clk, input logic reset, input logic qfull, input logic memreq, input logic memreqdir, input logic[31:0] memaddr, input logic[31:0] programcounter, output logic validaddr, output logic validdata, output logic read, output logic write, output logic incprefetch, output logic[31:0] toprefetch, output logic memwait, inout logic[31:0] adbus, inout logic[31:0] memdata);
 
 	logic[2:0] busstate;
 	localparam HIGHZ = 0;
@@ -662,7 +672,7 @@ endmodule
 //Execution unit
 //Inputs: clk, reset, funcsel, ina, inb, icode[18]
 //Outputs: execout, stalldispatch
-module execute_unit(input logic clk, input logic[1:0] funcsel, input logic[31:0] ina, input logic[31:0] inb, input logic[21:0] icode[17:0], output logic[31:0] execout, output logic stalldispatch);
+module execute_unit(input logic clk, input logic reset, input logic[1:0] funcsel, input logic[31:0] ina, input logic[31:0] inb, input logic[21:0] icode[17:0], output logic[31:0] execout, output logic stalldispatch);
 	
 	logic[4:0] executec;
 	always_ff @(posedge clk)
