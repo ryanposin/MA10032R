@@ -1,17 +1,19 @@
 //Special register, for SP and PC
 module special_reg (input wire clk, input wire reset, input wire inc, input wire dec, input wire we, input logic[31:0] d, output logic[31:0] q);
 	always_ff @(negedge clk)
-		if (we)
-			q <= d;
-		else if (dec)
-			q <= q - 1;
-		else if (inc)
-			q <= q + 1;
-		else if (inc & dec)
-			q <= q;
-		
-		if (reset)
-			q <= 0;
+		begin
+			if (we)
+				q <= d;
+			else if (dec)
+				q <= q - 1;
+			else if (inc)
+				q <= q + 1;
+			else if (inc & dec)
+				q <= q;
+			
+			if (reset)
+				q <= 0;
+		end
 endmodule
 
 //32 bit 2:1 MUX
@@ -34,9 +36,9 @@ logic[31:0] registers[15:0];
 	always_ff @(negedge clk)
 		begin
 			if (reset)
-				registers[15:0] <= {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-			else if (we & writesel != 0)
-				registers[writesel[3:0] <= writeinput;
+				registers[15:0] <= {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+			else if (we & (writesel != 0))
+				registers[writesel[3:0]] <= writeinput;
 		end
 	always_comb
 		begin
@@ -564,6 +566,7 @@ module ma10k_frontend(input logic[31:0] instruction, output logic[21:0] icode[17
 	localparam JUMPI = 8'h27;
 	localparam CALL = 8'h28;
 	localparam RET = 8'h29;
+	localparam RETI = 8'h2A;
 
 	//Load/store/stack
 	localparam LRR = 8'h30;
@@ -585,13 +588,15 @@ module ma10k_frontend(input logic[31:0] instruction, output logic[21:0] icode[17
 
 	//Supervisor instructions
 	localparam PRG = 8'h70;
-	localparam RESPSP = 8'h71;
-	localparam SCOP = 8'h72;
-	localparam GCOP = 8'h73;
-	localparam EI = 8'h74;
-	localparam DI = 8'h75;
-	localparam GPTIMER = 8'h76;
-	localparam RESET = 8'h77;
+	localparam LPSP = 8'h71;
+	localparam SPSP = 8'h72;
+	localparam SCOP = 8'h73;
+	localparam GCOP = 8'h74;
+	localparam EI = 8'h75;
+	localparam DI = 8'h76;
+	localparam GPTIMER = 8'h77;
+	localparam RESET = 8'h78;
+	
 	logic[31:0] microcode[150];
 	initial $readmemh(microcode.txt, microcode);
 
