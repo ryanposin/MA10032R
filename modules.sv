@@ -528,7 +528,7 @@ endmodule
 //Decoder
 //Inputs: instruction
 //Outputs: icode[18]
-module ma10k_frontend(input logic[31:0] instruction, output logic[21:0] icode[17:0]);
+module ma10k_frontend(input logic[31:0] instruction, output logic[26:0] icode[17:0]);
 
 	//ALU and shift
 	localparam SUB = 8'h00;
@@ -694,11 +694,9 @@ module execute_unit(input logic clk, input logic reset, input logic[1:0] funcsel
 			end
 			2'b01: begin
 				execout = multout;
-				templatch = icode[executec][];
 				multmuxas = icode[executec][];
 				multmuxbs = icode[executec][];
 				multdemuxs = icode[executec][];
-				accumux = icode[executec][];
 				accumulate = icode[executec][];
 				stalldispatch = ~multdone;
 			end
