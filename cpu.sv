@@ -52,7 +52,8 @@ regfile registers(clk, ~reset, todecode[7:4],todecode[3:0],regtowrite, regwe, wr
 
 always_comb currentsp = mode ? progspoint : supspoint;
 
-ttb4inmux pbmux(regb, immediate, currentsp, pcount, pbmuxs, outmuxb);
+ttb4inmux immmux({16'b0,immediate},{immediate,16'b0}, {immediate[15],immediate[15:0]} immhighlows, immediate32);
+ttb4inmux pbmux(regb, immediate32, currentsp, pcount, pbmuxs, outmuxb);
 
 pipebreak pipestage01(clk, ~reset, execbothready, ucodebank, rega, outmuxb, todecode[11:8], fucodebank, funca, funcb, regtowrite);
 
