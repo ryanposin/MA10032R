@@ -9,9 +9,11 @@ logic qfull, memreq, memreqdir, incprefetch, memwait;
 logic[31:0] memaddr;
 logic instreq, incprefetch, qfull;
 logic execready, execbothready;
-logic pcinc, pcdec, pcwe, pspinc, pspdec, pspwe, sspinc, sspdec, sspwe;
+logic pcinc, pcdec, rawpcwe, pcwe, pspinc, pspdec, pspwe, sspinc, sspdec, sspwe;
+logic[1:0] pccond;
 logic mode;
-logic[31:0] toprefetch, memdata, tofetch, todecode, writeback, rega, regb, memout, pcount, progspoint, supspoint, currentsp;
+logic[31:0] toprefetch, memdata, tofetch, todecode, writeback, rega, regb, memout, pcount, progspoint, supspoint, currentsp outmuxa;
+logic pamuxs;
 logic[1:0] pbmuxs;
 logic[21:0] ucodebank[], fucodebank[18];
 logic[3:0] regtowrite;
@@ -30,6 +32,8 @@ busunit busfrontend(clk, ~reset, qfull, memreq, memreqdir, memaddr, programcount
 prefetcher prefetch(clk, ~reset, instreq, incprefetch, toprefetch, qfull, tofetch);
 
 fetcher fetch(clk, ~reset, execbothready, tofetch, todecode);
+
+pcwe = condpc ? ( pccond[1] ? ((pccond[0] ? (lt & eq) : lt) : (pccond[0] ? ~eq : eq))) : rawpcwe;
 
 special_reg pc(clk, ~reset, pcinc, pcdec, pcwe, writeback, pcount);
 
@@ -54,8 +58,9 @@ always_comb currentsp = mode ? progspoint : supspoint;
 
 ttb4inmux immmux({16'b0,immediate},{immediate,16'b0}, {immediate[15],immediate[15:0]} immhighlows, immediate32);
 ttb4inmux pbmux(regb, immediate32, currentsp, pcount, pbmuxs, outmuxb);
+ttb2inmux pamux(rega, pcount, pamuxs, outmuxa);
 
-pipebreak pipestage01(clk, ~reset, execbothready, ucodebank, rega, outmuxb, todecode[11:8], fucodebank, funca, funcb, regtowrite);
+pipebreak pipestage01(clk, ~reset, execbothready, ucodebank, outmuxa, outmuxb, todecode[11:8], fucodebank, funca, funcb, regtowrite);
 
 execute_unit execution(clk, ~reset, fucodebank[], funca, funcb, fucodebank[], execout, ~execready);
 
