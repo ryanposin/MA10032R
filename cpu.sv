@@ -27,6 +27,7 @@ logic[1:0] wbmuxs, execmode;
 logic[4:0] fcount;
 logic internalreset;
 logic pspreset;
+logic notreset, notexecready, notmemready, noteq;
 
 always_comb
 	begin
@@ -51,25 +52,29 @@ always_comb
 		pspreset = fucodebank[fcount][38];
 	end
 
+always notreset = ~reset;
+always notexecready = ~execready;
+always notmemready = ~memready;
+always noteq = ~eq;
+
 //From external: clk, reset
 //To external: validaddr, validdata, read, write
 //Bidirectional external: adbus
-busunit busfrontend(clk, ~reset, qfull, memreq, memreqdir, memaddr, pcount, validaddr, validdata, read, write, incprefetch, toprefetch, memwait, adbus, memdata);
+busunit busfrontend(clk, notreset, qfull, memreq, memreqdir, memaddr, pcount, validaddr, validdata, read, write, incprefetch, toprefetch, memwait, adbus, memdata);
 
 
-prefetcher prefetch(clk, ~reset, instreq, incprefetch, toprefetch, qfull, tofetch);
+prefetcher prefetch(clk, notreset, instreq, incprefetch, toprefetch, qfull, tofetch);
 
-fetcher fetch(clk, ~reset, execbothready, tofetch, todecode);
+fetcher fetch(clk, notreset, execbothready, tofetch, todecode);
 
-ob4inmux pccondmux(eq, ~eq, lt, lt | eq, pccond, pccondout);
+ob4inmux pccondmux(eq, noteq, lt, lt | eq, pccond, pccondout);
 always pcwe = condpc ? pccondout : rawpcwe;
-
 //00 - Equal
 //01 - Not equal
 //10 - Less than
 //11 - Less than or equal to
 
-special_reg pc(clk, ~reset, pcinc, pcdec, pcwe, writeback, pcount);
+special_reg pc(clk, notreset, pcinc, pcdec, pcwe, writeback, pcount);
 
 always_comb
 	begin
@@ -81,12 +86,12 @@ always_comb
 		sspwe = mode ? 0 : spwe;
 	end
 
-special_reg psp(clk, ~reset, pspinc, pspdec, pspwe, writeback, progspoint);
-special_reg ssp(clk, ~reset, sspinc, sspdec, sspwe, writeback, supspoint);
+special_reg psp(clk, notreset, pspinc, pspdec, pspwe, writeback, progspoint);
+special_reg ssp(clk, notreset, sspinc, sspdec, sspwe, writeback, supspoint);
 
 ma10k_frontend decode(todecode, immediate, ucodebank);
 
-regfile registers(clk, ~reset, todecode[7:4],todecode[3:0],regtowrite, regwe, writeback, rega, regb);
+regfile registers(clk, notreset, todecode[7:4],todecode[3:0],regtowrite, regwe, writeback, rega, regb);
 
 always_comb currentsp = mode ? progspoint : supspoint;
 
@@ -100,11 +105,11 @@ ttb4inmux immmux({16'b0,immediate},{immediate,16'b0}, immsignextend, 0, immhighl
 ttb4inmux pbmux(regb, immediate32, currentsp, pcount, pbmuxs, outmuxb);
 ttb2inmux pamux(rega, pcount, pamuxs, outmuxa);
 
-pipebreak pipestage01(clk, ~reset, execbothready, ucodebank, outmuxa, outmuxb, todecode[11:8], fucodebank[17:0], funca, funcb, regtowrite);
+pipebreak pipestage01(clk, notreset, execbothready, ucodebank, outmuxa, outmuxb, todecode[11:8], fucodebank[0:17], funca, funcb, regtowrite);
 
-execute_unit execution(clk, ~reset, execmode, funca, funcb, fucodebank[17:0], execout, ~execready, lt, eq, fcount);
+execute_unit execution(clk, notreset, execmode, funca, funcb, fucodebank[0:17], execout, notexecready, lt, eq, fcount);
 
-mem_access_unit memaccess(execout, funcb, addrsel, datasel, requestdbus, dbusreqdir, memwait, memreq, memreqdir, memaddr, memout, ~memready, memdata);
+mem_access_unit memaccess(execout, funcb, addrsel, datasel, requestdbus, dbusreqdir, memwait, memreq, memreqdir, memaddr, memout, notmemready, memdata);
 
 ttb4inmux wbmux(execout, memout, funcb, 0, wbmuxs, writeback);
 

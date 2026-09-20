@@ -560,6 +560,12 @@ endmodule
 //Inputs: instruction
 //Outputs: immediate[15:0], icode[38:0]
 module ma10k_frontend(input logic[31:0] instruction, output logic[15:0] immediate, output logic[38:0] icode[17:0]);
+	
+	always_comb
+		if (instruction[19:17] == 'b010)
+			immediate = {instruction[31:16], instruction[11:8]};
+		else
+			immediate = {instruction[31:16], instruction[3:0]};
 
 	//ALU and shift
 	localparam SUB = 8'h00;
@@ -706,9 +712,15 @@ module pipebreak(input logic clk, input logic reset, input logic stall, input lo
 				{afunc, bfunc, regtowritefunc} <= {32'b0,32'b0,4'b0};
 			else
 				if (stall)
-					{icodefunc, afunc, bfunc, regtowritefunc} <= {icodefunc, afunc, bfunc, regtowritefunc};
+					begin
+						{afunc, bfunc, regtowritefunc} <= {afunc, bfunc, regtowritefunc};
+						icodefunc <= icodefunc;
+					end
 				else 
-					{icodefunc, afunc, bfunc, regtowritefunc} <= {icode, a, b, regtowrite};
+					begin
+						{afunc, bfunc, regtowritefunc} <= {a, b, regtowrite};
+						icodefunc <= icode;
+					end
 		end
 endmodule
 
