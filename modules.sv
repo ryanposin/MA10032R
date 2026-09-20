@@ -48,7 +48,7 @@ logic[31:0] registers[15:0];
 endmodule
 
 //Custom ALU implementation
-module alumod (input wire[2:0] s, input wire m, input wire[31:0] a, input wire[31:0] b, input wire[3:0] shiftamt, output logic[31:0] dout, output logic lt, output logic eq);
+module alumod (input wire[2:0] s, input wire m, input wire[31:0] a, input wire[31:0] b, output logic[31:0] dout, output logic lt, output logic eq);
 
 	always_comb
 		begin
@@ -94,9 +94,11 @@ endmodule
 //Shifter unit
 //Inputs: clk, reset, shifttype, shiftamt
 //Outputs: stalldispatch, shiftdone, shiftout
-module shifter_unit(input wire clk, input wire reset, input wire[1:0] shifttype, input wire[4:0] shiftamt, output logic stalldispatch, output logic shiftdone, output logic[31:0] shiftout);
+module shifter_unit(input wire clk, input wire reset, input wire shiften, input wire[31:0] a, input wire[1:0] shifttype, input wire[4:0] shiftamt, output logic stalldispatch, output logic shiftdone, output logic[31:0] shiftout);
 	logic[1:0] currentshiftamount;
 	logic[4:0] shiftstate;
+	logic[31:0] dout;
+
 	localparam WAIT = 0;
 	localparam SH16 = 6'b010000;
 	localparam SH8 = 6'b001000;
@@ -117,44 +119,44 @@ module shifter_unit(input wire clk, input wire reset, input wire[1:0] shifttype,
 				WAIT: if (shiften)
 					begin
 						stalldispatch <= 1;
-						shiftout <= a;
-						if (shiftamount[4] == 1'b1)
+						dout <= a;
+						if (shiftamt[4] == 1'b1)
 							shiftstate <= SH16;
-						else if (shiftamount[4:3] == 2'b01)
+						else if (shiftamt[4:3] == 2'b01)
 							shiftstate <= SH8;
-						else if (shiftamount[4:2] == 3'b001)
+						else if (shiftamt[4:2] == 3'b001)
 							shiftstate <= SH4;
-						else if (shiftamount[4:1] == 4'b0001)
+						else if (shiftamt[4:1] == 4'b0001)
 							shiftstate <= SH2;
-						else if (shiftamount[4:0] == 5'b00001)
+						else if (shiftamt[4:0] == 5'b00001)
 							shiftstate <= SH1;
 						else
 							shiftstate <= SDONE;
 					end
 
-				SH16:	if (shiftamount[3] == 1'b1)
+				SH16:	if (shiftamt[3] == 1'b1)
 						shiftstate <= SH8;
-					else if (shiftamount[3:2] == 2'b01)
+					else if (shiftamt[3:2] == 2'b01)
 						shiftstate <= SH4;
-					else if (shiftamount[3:1] == 3'b001)
+					else if (shiftamt[3:1] == 3'b001)
 						shiftstate <= SH2;
-					else if (shiftamount[3:0] == 4'b0001)
+					else if (shiftamt[3:0] == 4'b0001)
 						shiftstate <= SH1;
 					else
 						shiftstate <= SDONE;
 
-				SH8:	if (shiftamount[2] == 1'b1)
+				SH8:	if (shiftamt[2] == 1'b1)
 						shiftstate <= SH4;
-					else if (shiftamount[2:1] == 2'b01)
+					else if (shiftamt[2:1] == 2'b01)
 						shiftstate <= SH2;
-					else if (shiftamount[2:0] == 3'b001)
+					else if (shiftamt[2:0] == 3'b001)
 						shiftstate <= SH1;
 					else
 						shiftstate <= SDONE;
 
-				SH4:	if (shiftamount[1] == 1'b1)
+				SH4:	if (shiftamt[1] == 1'b1)
 						shiftstate <= SH2;
-					else if (shiftamount[1:0] == 2'b01)
+					else if (shiftamt[1:0] == 2'b01)
 						shiftstate <= SH1;
 					else
 						shiftstate <= SDONE;
@@ -174,12 +176,15 @@ module shifter_unit(input wire clk, input wire reset, input wire[1:0] shifttype,
 	always_comb
 		begin
 			if (shiftstate == SDONE)
-				shiftdone = 1;
+				begin
+					shiftdone = 1;
+					shiftout = dout;
+				end
 			else
 				shiftdone = 0;
 
 			case(shifttype)
-				2'b00:	case (currentshiftamt) //Shift left w/o carry
+				2'b00:	case (currentshiftamount) //Shift left w/o carry
 							SH1: dout = dout << 1;
 							SH2: dout = dout << 2;
 							SH4: dout = dout << 4;
@@ -188,7 +193,7 @@ module shifter_unit(input wire clk, input wire reset, input wire[1:0] shifttype,
 							default: dout = 32'b0;
 						endcase
 			
-				2'b01:	case (currentshiftamt) //Shift right w/o carry
+				2'b01:	case (currentshiftamount) //Shift right w/o carry
 							SH1: dout = dout >> 1;
 							SH2: dout = dout >> 2;
 							SH4: dout = dout >> 4;
@@ -196,27 +201,27 @@ module shifter_unit(input wire clk, input wire reset, input wire[1:0] shifttype,
 							SH16: dout = dout >> 16;
 							default: dout = 32'b0;
 						endcase							
-				2'b10:	case (currentshiftamt) //Rotate right w/o carry
-							SH1: dout = {a[0],a[31:1]};
-							SH2: dout = {a[1:0],a[31:2]};
-							SH4: dout = {a[3:0],a[31:4]};
-							SH8: dout = {a[7:0],a[31:8]};
-							SH16: dout = {a[15:0],a[31:16]};
+				2'b10:	case (currentshiftamount) //Rotate right w/o carry
+							SH1: dout = {dout[0],dout[31:1]};
+							SH2: dout = {dout[1:0],dout[31:2]};
+							SH4: dout = {dout[3:0],dout[31:4]};
+							SH8: dout = {dout[7:0],dout[31:8]};
+							SH16: dout = {dout[15:0],dout[31:16]};
 							default: dout = 32'b0;
 						endcase
-				3'b11:	case (currentshiftamt) //Rotate left w/o carry
-							SH1: dout = {a[30:0],a[31]};
-							SH2: dout = {a[29:0],a[31:30]};
-							SH4: dout = {a[27:0],a[31:28]};
-							SH8: dout = {a[23:0],a[31:24]};
-							SH16: dout = {a[15:0],a[31:16]};
+				3'b11:	case (currentshiftamount) //Rotate left w/o carry
+							SH1: dout = {dout[30:0],dout[31]};
+							SH2: dout = {dout[29:0],dout[31:30]};
+							SH4: dout = {dout[27:0],dout[31:28]};
+							SH8: dout = {dout[23:0],dout[31:24]};
+							SH16: dout = {dout[15:0],dout[31:16]};
 							default: dout = 32'b0;
 						endcase
 				endcase
 		end
 endmodule
 
-module multiplier_unit (input wire clk, input wire[31:0] a, input wire[31:0] b, input wire[1:0] muxas, input wire[1:0] muxbs, input wire[2:0] demuxs, input wire highlow, input wire accumulate, output logic[31:0] multout);
+module multiplier_unit (input wire clk, input wire reset, input wire[31:0] a, input wire[31:0] b, input wire[1:0] muxas, input wire[1:0] muxbs, input wire[2:0] demuxs, input wire highlow, input wire accumulate, output logic[31:0] multout);
 	
 	logic[7:0] multina;
 	logic[7:0] multinb;
@@ -512,14 +517,14 @@ module fetcher(input logic clk, input logic reset, input logic ready, input logi
 				FSTALL: if (~ready)
 						fetchstate <= FSTALL;
 					else
-						fstate <= FDECODE;
+						fetchstate <= FDECODE;
 				FDECODE:
 					begin
 						insout <= insin;
 						if (~ready)
 							fetchstate <= FSTALL;
 						else
-							fstate <= FDECODE;
+							fetchstate <= FDECODE;
 					end
 			endcase
 		end
@@ -527,8 +532,8 @@ endmodule
 
 //Decoder
 //Inputs: instruction
-//Outputs: icode[18]
-module ma10k_frontend(input logic[31:0] instruction, output logic[26:0] icode[17:0]);
+//Outputs: immediate[15:0], icode[18]
+module ma10k_frontend(input logic[31:0] instruction, output logic[15:0] immediate, output logic[26:0] icode[17:0]);
 
 	//ALU and shift
 	localparam SUB = 8'h00;
@@ -555,7 +560,8 @@ module ma10k_frontend(input logic[31:0] instruction, output logic[26:0] icode[17
 	localparam MULTQW = 8'h10;
 	localparam MULTHW = 8'h11;
 	localparam MULTW = 8'h12;
-
+	localparam MULTR = 8'h13;
+	localparam RHMULT = 8'h14;
 	//Branch and jump
 	localparam BREQ = 8'h20;
 	localparam BRNEQ = 8'h21;
@@ -589,73 +595,79 @@ module ma10k_frontend(input logic[31:0] instruction, output logic[26:0] icode[17
 	//Supervisor instructions
 	localparam PRG = 8'h70;
 	localparam LPSP = 8'h71;
-	localparam SPSP = 8'h72;
-	localparam SCOP = 8'h73;
-	localparam GCOP = 8'h74;
-	localparam EI = 8'h75;
-	localparam DI = 8'h76;
-	localparam GPTIMER = 8'h77;
-	localparam RESET = 8'h78;
+	localparam RESPSP = 'h72;
+	localparam SPSP = 8'h73;
+	localparam GPSP = 8'h74;
+	localparam SCOP = 8'h75;
+	localparam GCOP = 8'h76;
+	localparam EI = 8'h77;
+	localparam DI = 8'h78;
+	localparam GPTIMER = 8'h79;
+	localparam RESET = 8'h7A;
 	
 	logic[31:0] microcode[150];
 	initial $readmemh(microcode.txt, microcode);
 
 	always_comb
 		case (instruction[19:12])
-			SUB:
-			ADD:
-			SHL:
-			SHR:
-			ASR:
-			ROTL:
-			ROTR:
-			NOT:
-			AND:
-			OR:
-			XOR:
-			NAND:
-			NOR:
-			XNOR:
-			SUP:
-			SUBI:
-			ADDI:
-			MULTQW:
-			MULTHW:
-			MULTW:
-			BREQ:
-			BRNEQ:
-			BRLT:
-			BRLTEQ:
-			JUMPREL:
-			JUMPR:
-			JUMPI:
-			CALL:
-			RET:
-			LRR:
-			LRI:
-			LSPR:
-			LUI:
-			LLI:
-			SSPR:
-			STR:
-			STI:
-			LREL:
-			SREL:
-			PUSH:
-			POP:
-			STQW:
-			LDQW:
-			STHW:
-			LDHW:
-			PRG:
-			RESPSP:
-			SCOP:
-			GCOP:
-			EI:
-			DI:
-			GPTIMER:
-			RESET:
-		end
+			SUB: icode[0] = microcode[2];
+			ADD: icode[0] = microcode[3];
+			SHL: icode[0] = microcode[4];
+			SHR: icode[0] = microcode[5];
+			ASR: icode[0] = microcode[6];
+			ROTL: icode[0] = microcode[7];
+			ROTR: icode[0] = microcode[8];
+			NOT: icode[0] = microcode[9];
+			AND: icode[0] = microcode[10];
+			OR: icode[0] = microcode[11];
+			XOR: icode[0] = microcode[12];
+			NAND: icode[0] = microcode[13];
+			NOR: icode[0] = microcode[14];
+			XNOR: icode[0] = microcode[15];
+			SUP: icode[2:0] = microcode[18:16];
+			SUBI: icode[0] = microcode[19];
+			ADDI: icode[0] = microcode[20];
+			MULTQW: icode[1:0] = microcode[22:21];
+			MULTHW: icode[4:0] = microcode[27:23];
+			MULTW: icode[16:0] = microcode[44:28];
+			MULTR: icode[0] = microcode[45];
+			RHMULT: icode[0] = microcode[46];
+			BREQ: icode[1:0] = microcode[48:47];
+			BRNEQ: icode[1:0] = microcode[50:49];
+			BRLT: icode[1:0] = microcode[52:51];
+			BRLTEQ: icode[1:0] = microcode[54:53];
+			JUMPREL: icode[0] = microcode[55];
+			JUMPR: icode[0] = microcode[56];
+			JUMPI: icode[0] = microcode[57];
+			CALL: icode[1:0] = microcode[59:58];
+			RET: icode[1:0] = microcode[61:60];
+			LRR: icode[0] = microcode[62];
+			LRI: icode[0] = microcode[63];
+			LSPR: icode[0] = microcode[64];
+			LUI: icode[0] = microcode[65];
+			LLI: icode[0] = microcode[66];
+			SSPR: icode[0] = microcode[67];
+			STR: icode[0] = microcode[68];
+			STI: icode[0] = microcode[69];
+			LREL: icode[0] = microcode[70];
+			SREL: icode[0] = microcode[71];
+			PUSH: icode[1:0] = microcode[73:72];
+			POP: icode[1:0] = microcode[75:74];
+			STQW: icode[0] = microcode[76];
+			LDQW: icode[0] = microcode[77];
+			STHW: icode[0] = microcode[78];
+			LDHW: icode[0] = microcode[79];
+			PRG: icode[3:0] = microcode[83:80];
+			RESPSP: icode[0] = microcode[84];
+			SPSP:	icode[0] = microcode[85];
+			GPSP:	icode[0] = microcode[86];
+			SCOP: icode[0] = microcode[87];
+			GCOP: icode[0] = microcode[88];
+			EI: icode[0] = microcode[89];
+			DI: icode[0] = microcode[90];
+			GPTIMER: icode[0] = microcode[90];
+			RESET: icode[0] = microcode[91];
+		endcase
 endmodule
 
 //Pipeline break
@@ -677,39 +689,43 @@ endmodule
 //Execution unit
 //Inputs: clk, reset, funcsel, ina, inb, icode[18]
 //Outputs: execout, stalldispatch
-module execute_unit(input logic clk, input logic reset, input logic[1:0] funcsel, input logic[31:0] ina, input logic[31:0] inb, input logic[21:0] icode[17:0], output logic[31:0] execout, output logic stalldispatch);
-	
-	logic[4:0] executec;
-	always_ff @(posedge clk)
-		if(icode[executec][])
+module execute_unit(input logic clk, input logic reset, input logic[1:0] funcsel, input logic[31:0] ina, input logic[31:0] inb, input logic[31:0] icode[17:0], output logic[31:0] execout, output logic stalldispatch, output logic[5:0] executec);
+	logic[31:0] aluout, shiftout, multout;
+	logic shiftdone, shiften, alufunctype, lessthan, equalto, multdone;
+	logic[1:0] multmuxas, multmuxbs;
+	logic[2:0] alufunc,multdemuxs;
 
+	always_ff @(posedge clk)
+		if(icode[executec][31])
+			executec <= executec + 1;
 		else
-			executec = 0;
+			executec <= 0;
 	always_comb
 		case (funcsel)
 			2'b00: begin
 				execout = aluout;
-				alufuncsel = icode[0][];
-				alufunctype = icode[0][];
+				{alufunctype,alufunc} = icode[0][19:17];
+				alufunctype = icode[0][20];
 			end
 			2'b01: begin
 				execout = multout;
-				multmuxas = icode[executec][];
-				multmuxbs = icode[executec][];
-				multdemuxs = icode[executec][];
-				accumulate = icode[executec][];
+				multmuxas = icode[executec][22:21];
+				multmuxbs = icode[executec][24:23];
+				multdemuxs = icode[executec][27:25];
+			//	accumulate = icode[executec][28];
 				stalldispatch = ~multdone;
 			end
 			2'b10: begin
 				execout = shiftout;
 				stalldispatch = ~shiftdone;
+				shiften = 1;
 			end
 			default: execout = 0;
 		endcase
 
-	alumod alu(alufunc, alufunctype, ina, inb, immediate[3:0], aluout, lessthan, equalto);
-	multiplier_unit mult(clk, ina, inb, templatch, multmuxas, multmuxbs, multdemuxs, accumux, accumulate, multout);
-	shifter_unit shifter(clk, ina, immediate[4:0], shiftout);
+	alumod alu(alufunc, alufunctype, ina, inb, aluout, lessthan, equalto);
+	multiplier_unit mult(clk, reset, shiften, ina, inb, multmuxas, multmuxbs, multdemuxs, accumulate, multout);
+	shifter_unit shifter(clk, reset, shiften, ina, icode[executec][18:17], inb[4:0], stalldispatch, shiftdone, shiftout);
 endmodule
 
 //Memory access unit
