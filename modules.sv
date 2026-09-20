@@ -28,6 +28,11 @@ module ttb4inmux (input wire[31:0] i0, input wire[31:0] i1, input wire[31:0] i2,
 		q = select[1] ? (select[0] ? i3 : i2) : (select[0] ? i1 : i0);
 endmodule
 
+module ob4inmux (input wire i0, input wire i1, input wire i2, input wire i3, input wire[1:0] select, output logic q);
+	always_comb
+		q = select[1] ? (select[0] ? i3 : i2) : (select[0] ? i1 : i0);
+endmodule
+
 //Register file with hardwired ZERO register (R0), R1-R15 are general purpose 
 module regfile (input logic clk, input logic reset, input wire[3:0] portasel, input wire[3:0] portbsel, input wire[3:0] writesel, input wire we, input wire[31:0] writeinput, output logic[31:0] a, output logic[31:0] b);
 
@@ -94,9 +99,8 @@ endmodule
 //Shifter unit
 //Inputs: clk, reset, shifttype, shiftamt
 //Outputs: stalldispatch, shiftdone, shiftout
-module shifter_unit(input wire clk, input wire reset, input wire shiften, input wire[31:0] a, input wire[1:0] shifttype, input wire[4:0] shiftamt, output logic stalldispatch, output logic shiftdone, output logic[31:0] shiftout);
-	logic[1:0] currentshiftamount;
-	logic[4:0] shiftstate;
+module shifter_unit(input wire clk, input wire reset, input wire shiften, input wire[31:0] a, input wire[2:0] shifttype, input wire[4:0] shiftamt, output logic stalldispatch, output logic shiftdone, output logic[31:0] shiftout);
+	logic[5:0] shiftstate;
 	logic[31:0] dout;
 
 	localparam WAIT = 0;
@@ -112,14 +116,12 @@ module shifter_unit(input wire clk, input wire reset, input wire shiften, input 
 				begin
 					stalldispatch <= 0;
 					shiftstate <= WAIT;
-					currentshiftamount <= 0;
 				end
 
 			case (shiftstate)
 				WAIT: if (shiften)
 					begin
 						stalldispatch <= 1;
-						dout <= a;
 						if (shiftamt[4] == 1'b1)
 							shiftstate <= SH16;
 						else if (shiftamt[4:3] == 2'b01)
@@ -173,8 +175,10 @@ module shifter_unit(input wire clk, input wire reset, input wire shiften, input 
 			endcase
 		end
 
-	always_comb
+	always_latch
 		begin
+			if (shiftstate == WAIT)
+					dout = a;
 			if (shiftstate == SDONE)
 				begin
 					shiftdone = 1;
@@ -184,7 +188,7 @@ module shifter_unit(input wire clk, input wire reset, input wire shiften, input 
 				shiftdone = 0;
 
 			case(shifttype)
-				2'b00:	case (currentshiftamount) //Shift left w/o carry
+				3'b000:	case (shiftstate) //Shift left w/o carry
 							SH1: dout = dout << 1;
 							SH2: dout = dout << 2;
 							SH4: dout = dout << 4;
@@ -193,7 +197,7 @@ module shifter_unit(input wire clk, input wire reset, input wire shiften, input 
 							default: dout = 32'b0;
 						endcase
 			
-				2'b01:	case (currentshiftamount) //Shift right w/o carry
+				3'b001:	case (shiftstate) //Shift right w/o carry
 							SH1: dout = dout >> 1;
 							SH2: dout = dout >> 2;
 							SH4: dout = dout >> 4;
@@ -201,7 +205,7 @@ module shifter_unit(input wire clk, input wire reset, input wire shiften, input 
 							SH16: dout = dout >> 16;
 							default: dout = 32'b0;
 						endcase							
-				2'b10:	case (currentshiftamount) //Rotate right w/o carry
+				3'b010:	case (shiftstate) //Rotate right w/o carry
 							SH1: dout = {dout[0],dout[31:1]};
 							SH2: dout = {dout[1:0],dout[31:2]};
 							SH4: dout = {dout[3:0],dout[31:4]};
@@ -209,7 +213,7 @@ module shifter_unit(input wire clk, input wire reset, input wire shiften, input 
 							SH16: dout = {dout[15:0],dout[31:16]};
 							default: dout = 32'b0;
 						endcase
-				3'b11:	case (currentshiftamount) //Rotate left w/o carry
+				3'b011:	case (shiftstate) //Rotate left w/o carry
 							SH1: dout = {dout[30:0],dout[31]};
 							SH2: dout = {dout[29:0],dout[31:30]};
 							SH4: dout = {dout[27:0],dout[31:28]};
@@ -217,6 +221,27 @@ module shifter_unit(input wire clk, input wire reset, input wire shiften, input 
 							SH16: dout = {dout[15:0],dout[31:16]};
 							default: dout = 32'b0;
 						endcase
+				3'b100: case (shiftstate)
+							SH1: dout = {dout[31], dout[31:1]};
+							SH2: if (dout[31])
+									dout = {2'b1, dout[31:2]};
+								else
+									dout = {2'b0, dout[31:2]};
+							SH4: if (dout[31])
+									dout = {4'b1, dout[31:4]};
+								else
+									dout = {4'b0, dout[31:4]};
+							SH8: if (dout[31])
+									dout = {8'b1, dout[31:8]};
+								else
+									dout = {8'b0, dout[31:8]};
+							SH16: if (dout[31])
+									dout = {16'b1, dout[31:16]};
+								else
+									dout = {16'b0, dout[31:16]};
+							default: dout = 32'b0;
+						endcase
+				default: dout = 32'b0;
 				endcase
 		end
 endmodule
@@ -244,7 +269,7 @@ module multiplier_unit (input wire clk, input wire reset, input wire[31:0] a, in
 	assign multtempout = multina * multinb; //Multiply
 	
 	//Demux multiplier to 64 bit register
-	always_comb
+	always
 		case (demuxs)
 			3'b000: demux = {48'b0, multtempout};
 			3'b001: demux = {40'b0, multtempout, 8'b0};
@@ -253,6 +278,7 @@ module multiplier_unit (input wire clk, input wire reset, input wire[31:0] a, in
 			3'b100: demux = {16'b0,multtempout, 32'b0};
 			3'b101: demux = {8'b0, multtempout, 40'b0};
 			3'b110: demux = {multtempout,48'b0};
+			default: demux = 0;
 		endcase
 	
 	//Accumulate
@@ -304,7 +330,7 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 				LATCHDATA: busstate <= HIGHZ;
 			endcase
 		end	
-	always_comb
+	always_latch
 		begin
 			case(busstate)
 			HIGHZ: adbus = 'hZ;
@@ -349,7 +375,7 @@ endmodule
 //Outputs: qfull, tofetch
 module prefetcher(input logic clk, input logic reset, input logic instreq, input logic instadd, input logic[31:0] insttoadd, output logic qfull, output logic[31:0] tofetch);
 	logic[2:0] ftrack;
-	logic[2:0] instqcount[6];
+	logic[2:0] instqcount[5:0];
 	logic[31:0] instq[6];
 	localparam QEMPTY = 0;
 	localparam Q1 = 1;
@@ -364,7 +390,7 @@ module prefetcher(input logic clk, input logic reset, input logic instreq, input
 			if (reset)
 				begin
 					ftrack <= QEMPTY;
-					instqcount[5:0][2:0] <= {'b111,'b111,'b111,'b111,'b111,'b111};
+					instqcount[5:0] <= {'b111,'b111,'b111,'b111,'b111,'b111};
 					instq[5:0] <= {0,0,0,0,0,0};
 				end
 			case (ftrack)
@@ -421,7 +447,7 @@ module prefetcher(input logic clk, input logic reset, input logic instreq, input
 							instqcount[0] <= 3'b111;
 							tofetch <= instq[0];
 						end
-					else if (instqcount[0] != 0 | instqcount[0] != 111)
+					else if (instqcount[0] != 0 | instqcount[0] != 'b111)
 						instqcount[0] <= instqcount[0] - 1;
 				
 					if (instqcount[1] == 0)
@@ -429,7 +455,7 @@ module prefetcher(input logic clk, input logic reset, input logic instreq, input
 							instqcount[1] <= 3'b111;
 							tofetch <= instq[1];
 						end
-					else if (instqcount[1] != 0 | instqcount[1] != 111)
+					else if (instqcount[1] != 0 | instqcount[1] != 'b111)
 						instqcount[1] <= instqcount[1] - 1;
 
 					if (instqcount[2] == 0)
@@ -437,7 +463,7 @@ module prefetcher(input logic clk, input logic reset, input logic instreq, input
 							instqcount[2] <= 3'b111;
 							tofetch <= instq[2];
 						end
-					else if (instqcount[2] != 0 | instqcount[2] != 111)
+					else if (instqcount[2] != 0 | instqcount[2] != 'b111)
 						instqcount[2] <= instqcount[2] - 1;
 
 					if (instqcount[3] == 0)
@@ -445,7 +471,7 @@ module prefetcher(input logic clk, input logic reset, input logic instreq, input
 							instqcount[3] <= 3'b111;
 							tofetch <= instq[3];
 						end
-					else if (instqcount[3] != 0 | instqcount[3] != 111)
+					else if (instqcount[3] != 0 | instqcount[3] != 'b111)
 						instqcount[3] <= instqcount[3] - 1;
 
 					if (instqcount[4] == 0)
@@ -453,7 +479,7 @@ module prefetcher(input logic clk, input logic reset, input logic instreq, input
 							instqcount[4] <= 3'b111;
 							tofetch <= instq[4];
 						end
-					else if (instqcount[4] != 0 | instqcount[4] != 111)
+					else if (instqcount[4] != 0 | instqcount[4] != 'b111)
 						instqcount[4] <= instqcount[4] - 1;
 
 					if (instqcount[5] == 0)
@@ -461,7 +487,7 @@ module prefetcher(input logic clk, input logic reset, input logic instreq, input
 							instqcount[5] <= 3'b111;
 							tofetch <= instq[5];
 						end
-					else if (instqcount[5] != 0 | instqcount[5] != 111)
+					else if (instqcount[5] != 0 | instqcount[5] != 'b111)
 						instqcount[5] <= instqcount[5] - 1;
 
 				end
@@ -532,8 +558,8 @@ endmodule
 
 //Decoder
 //Inputs: instruction
-//Outputs: immediate[15:0], icode[18]
-module ma10k_frontend(input logic[31:0] instruction, output logic[15:0] immediate, output logic[26:0] icode[17:0]);
+//Outputs: immediate[15:0], icode[38:0]
+module ma10k_frontend(input logic[31:0] instruction, output logic[15:0] immediate, output logic[38:0] icode[17:0]);
 
 	//ALU and shift
 	localparam SUB = 8'h00;
@@ -605,8 +631,8 @@ module ma10k_frontend(input logic[31:0] instruction, output logic[15:0] immediat
 	localparam GPTIMER = 8'h79;
 	localparam RESET = 8'h7A;
 	
-	logic[31:0] microcode[150];
-	initial $readmemh(microcode.txt, microcode);
+	logic[38:0] microcode[149:0];
+	initial $readmemh("microcode.txt", microcode);
 
 	always_comb
 		case (instruction[19:12])
@@ -673,11 +699,11 @@ endmodule
 //Pipeline break
 //Inputs: clk, reset, stall, icode[18], a, b, regtowrite
 //Outputs: icodefunc, afunc, bfunc, regtowritefunc
-module pipebreak(input logic clk, input logic reset, input logic stall, input logic[21:0] icode[18], input logic[31:0] a, input logic[31:0] b, input logic[3:0] regtowrite, output logic[21:0] icodefunc, output logic[31:0] afunc, output logic[31:0] bfunc, output logic[3:0] regtowritefunc);
+module pipebreak(input logic clk, input logic reset, input logic stall, input logic[38:0] icode[18], input logic[31:0] a, input logic[31:0] b, input logic[3:0] regtowrite, output logic[38:0] icodefunc[17:0], output logic[31:0] afunc, output logic[31:0] bfunc, output logic[3:0] regtowritefunc);
 	always_ff @(posedge clk)
 		begin
 			if (reset)
-				{icodefunc, afunc, bfunc,regtowritefunc} <= {0,0,0,0};
+				{afunc, bfunc, regtowritefunc} <= {32'b0,32'b0,4'b0};
 			else
 				if (stall)
 					{icodefunc, afunc, bfunc, regtowritefunc} <= {icodefunc, afunc, bfunc, regtowritefunc};
@@ -689,9 +715,9 @@ endmodule
 //Execution unit
 //Inputs: clk, reset, funcsel, ina, inb, icode[18]
 //Outputs: execout, stalldispatch
-module execute_unit(input logic clk, input logic reset, input logic[1:0] funcsel, input logic[31:0] ina, input logic[31:0] inb, input logic[31:0] icode[17:0], output logic[31:0] execout, output logic stalldispatch, output logic[5:0] executec);
+module execute_unit(input logic clk, input logic reset, input logic[1:0] funcsel, input logic[31:0] ina, input logic[31:0] inb, input logic[38:0] icode[17:0], output logic[31:0] execout, output logic stalldispatch, output logic lt, output logic eq, output logic[4:0] executec);
 	logic[31:0] aluout, shiftout, multout;
-	logic shiftdone, shiften, alufunctype, lessthan, equalto, multdone;
+	logic shiftdone, shiften, alufunctype, multdone, highlow, accumulate, shiftstalldispatch;
 	logic[1:0] multmuxas, multmuxbs;
 	logic[2:0] alufunc,multdemuxs;
 
@@ -704,7 +730,7 @@ module execute_unit(input logic clk, input logic reset, input logic[1:0] funcsel
 		case (funcsel)
 			2'b00: begin
 				execout = aluout;
-				{alufunctype,alufunc} = icode[0][19:17];
+				alufunc = icode[0][19:17];
 				alufunctype = icode[0][20];
 			end
 			2'b01: begin
@@ -712,20 +738,20 @@ module execute_unit(input logic clk, input logic reset, input logic[1:0] funcsel
 				multmuxas = icode[executec][22:21];
 				multmuxbs = icode[executec][24:23];
 				multdemuxs = icode[executec][27:25];
-			//	accumulate = icode[executec][28];
+				accumulate = icode[executec][28];
 				stalldispatch = ~multdone;
 			end
 			2'b10: begin
 				execout = shiftout;
-				stalldispatch = ~shiftdone;
+				stalldispatch = shiftstalldispatch;
 				shiften = 1;
 			end
 			default: execout = 0;
 		endcase
 
-	alumod alu(alufunc, alufunctype, ina, inb, aluout, lessthan, equalto);
-	multiplier_unit mult(clk, reset, shiften, ina, inb, multmuxas, multmuxbs, multdemuxs, accumulate, multout);
-	shifter_unit shifter(clk, reset, shiften, ina, icode[executec][18:17], inb[4:0], stalldispatch, shiftdone, shiftout);
+	alumod alu(alufunc, alufunctype, ina, inb, aluout, lt, eq);
+	multiplier_unit mult(clk, reset, ina, inb, multmuxas, multmuxbs, multdemuxs, highlow, accumulate, multout);
+	shifter_unit shifter(clk, reset, shiften, ina, icode[executec][19:17], inb[4:0], shiftstalldispatch, shiftdone, shiftout);
 endmodule
 
 //Memory access unit
@@ -733,7 +759,7 @@ endmodule
 //Outputs: dbusreq, dbusdir, addr, towriteback, stalldispatch 
 //Inout: data
 module mem_access_unit(input logic[31:0] fromexecute, input logic[31:0] portb, input logic addrsel, input logic datasel, input logic requestdbus, input logic dbusreqdir, input logic buswait, output logic dbusreq, output logic dbusdir, output logic[31:0] addr, output logic[31:0] towriteback, output logic stalldispatch, inout logic[31:0] data);
-	always_comb
+	always
 		begin
 			dbusreq = requestdbus;
 			dbusdir = dbusreqdir;

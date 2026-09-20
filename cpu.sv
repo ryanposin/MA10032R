@@ -12,55 +12,56 @@ logic execready, execbothready;
 logic pcinc, pcdec, rawpcwe, pcwe, pspinc, pspdec, pspwe, sspinc, sspdec, sspwe, spwe, condpc;
 logic[1:0] pccond;
 logic mode;
-logic[31:0] toprefetch, memdata, tofetch, todecode, writeback, rega, regb, memout, pcount, progspoint, supspoint, currentsp, outmuxa;
+logic[31:0] toprefetch, immsignextend, memdata, tofetch, todecode, writeback, rega, regb, memout, pcount, progspoint, supspoint, currentsp, outmuxa;
 logic pamuxs;
 logic[1:0] pbmuxs, immhighlows;
-logic[27:0] ucodebank[18], fucodebank[18];
+logic[38:0] ucodebank[18], fucodebank[18];
 logic[3:0] regtowrite;
 logic regwe;
 logic[31:0] outmuxb, funca, funcb;
 logic[31:0] execout;
 logic[15:0] immediate;
-logic addrsel, datasel, requestdbus, dbusreqdir, memready, pccondout, spdec, spinc;
+logic[31:0] immediate32;
+logic addrsel, datasel, requestdbus, dbusreqdir, memready, pccondout, spdec, spinc, eq, lt;
 logic[1:0] wbmuxs, execmode;
-logic[5:0] fcount;
+logic[4:0] fcount;
 logic internalreset;
 logic pspreset;
 
 always_comb
 	begin
-		regwe = fucodebank[0][fcount];
-		pcinc = fucodebank[1][fcount];
-		pcdec = fucodebank[2][fcount];
-		spinc = fucodebank[3][fcount];
-		spdec = fucodebank[4][fcount];
-		spwe = fucodebank[5][fcount];
-		pamuxs = ucodebank[6][0];
-		pbmuxs = ucodebank[8:7][0];
-		addrsel = fucodebank[9][fcount];
-		datasel = fucodebank[10][fcount];
-		requestdbus = fucodebank[11][fcount];
-		dbusreqdir = fucodebank[12][fcount];
-		wbmuxs = fucodebank[14:13][fcount];
-		execmode = fucodebank[16:15][fcount];
-		immhighlows = fucodebank[33:32][fcount];
-		condpc = fucodebank[34][fcount];
-		pccond = fucodebank[36:35][fcount];
-		internalreset = fucodebank[37][fcount];
-		pspreset = fucodebank[38][fcount];
+		regwe = fucodebank[fcount][0];
+		pcinc = fucodebank[fcount][1];
+		pcdec = fucodebank[fcount][2];
+		spinc = fucodebank[fcount][3];
+		spdec = fucodebank[fcount][4];
+		spwe = fucodebank[fcount][5];
+		pamuxs = ucodebank[0][6];
+		pbmuxs = ucodebank[0][8:7];
+		addrsel = fucodebank[fcount][9];
+		datasel = fucodebank[fcount][10];
+		requestdbus = fucodebank[fcount][11];
+		dbusreqdir = fucodebank[fcount][12];
+		wbmuxs = fucodebank[fcount][14:13];
+		execmode = fucodebank[fcount][16:15];
+		immhighlows = fucodebank[fcount][33:32];
+		condpc = fucodebank[fcount][34];
+		pccond = fucodebank[fcount][36:35];
+		internalreset = fucodebank[fcount][37];
+		pspreset = fucodebank[fcount][38];
 	end
 
 //From external: clk, reset
 //To external: validaddr, validdata, read, write
 //Bidirectional external: adbus
-busunit busfrontend(clk, ~reset, qfull, memreq, memreqdir, memaddr, programcounter, validaddr, validdata, read, write, incprefetch, toprefetch, memwait, adbus, memdata);
+busunit busfrontend(clk, ~reset, qfull, memreq, memreqdir, memaddr, pcount, validaddr, validdata, read, write, incprefetch, toprefetch, memwait, adbus, memdata);
 
 
 prefetcher prefetch(clk, ~reset, instreq, incprefetch, toprefetch, qfull, tofetch);
 
 fetcher fetch(clk, ~reset, execbothready, tofetch, todecode);
 
-ttb4inmux pccondmux(eq, ~eq, lt, lt | eq, pccond, pccondout);
+ob4inmux pccondmux(eq, ~eq, lt, lt | eq, pccond, pccondout);
 always pcwe = condpc ? pccondout : rawpcwe;
 
 //00 - Equal
@@ -89,13 +90,19 @@ regfile registers(clk, ~reset, todecode[7:4],todecode[3:0],regtowrite, regwe, wr
 
 always_comb currentsp = mode ? progspoint : supspoint;
 
-ttb4inmux immmux({16'b0,immediate},{immediate,16'b0}, {immediate[15],immediate[15:0]}, 0, immhighlows, immediate32);
+always_comb
+	if (immediate[15])
+		immsignextend = {16'b1,immediate[15:0]};
+	else
+		immsignextend = {16'b0,immediate[15:0]};
+
+ttb4inmux immmux({16'b0,immediate},{immediate,16'b0}, immsignextend, 0, immhighlows, immediate32);
 ttb4inmux pbmux(regb, immediate32, currentsp, pcount, pbmuxs, outmuxb);
 ttb2inmux pamux(rega, pcount, pamuxs, outmuxa);
 
-pipebreak pipestage01(clk, ~reset, execbothready, ucodebank, outmuxa, outmuxb, todecode[11:8], fucodebank, funca, funcb, regtowrite);
+pipebreak pipestage01(clk, ~reset, execbothready, ucodebank, outmuxa, outmuxb, todecode[11:8], fucodebank[17:0], funca, funcb, regtowrite);
 
-execute_unit execution(clk, ~reset, execmode, funca, funcb, fucodebank[37:0][fcount], execout, ~execready, fcount);
+execute_unit execution(clk, ~reset, execmode, funca, funcb, fucodebank[17:0], execout, ~execready, lt, eq, fcount);
 
 mem_access_unit memaccess(execout, funcb, addrsel, datasel, requestdbus, dbusreqdir, memwait, memreq, memreqdir, memaddr, memout, ~memready, memdata);
 
