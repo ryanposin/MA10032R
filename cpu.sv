@@ -1,9 +1,7 @@
-`include "modules.sv"
-
 //Inputs: clk, reset
 //Outputs: validaddr, validdata, read, write
 //Bidirectional: adbus[31:0]
-module core(input logic clk, reset, output logic validaddr, validdata, read, write, inout logic[31:0] adbus);
+module processor_core(input logic clk, reset, output logic validaddr, validdata, read, write, inout wire[31:0] adbus);
 
 logic qfull, memreq, memreqdir, incprefetch, memwait;
 logic[31:0] memaddr;
@@ -12,10 +10,10 @@ logic execready, execbothready;
 logic pcinc, pcdec, rawpcwe, pcwe, pspinc, pspdec, pspwe, sspinc, sspdec, sspwe, spwe, condpc;
 logic[1:0] pccond;
 logic mode;
-logic[31:0] toprefetch, immsignextend, memdata, tofetch, todecode, writeback, rega, regb, memout, pcount, progspoint, supspoint, currentsp, outmuxa;
+logic[31:0] toprefetch, immsignextend, tofetch, todecode, writeback, rega, regb, memout, pcount, progspoint, supspoint, currentsp, outmuxa;
 logic pamuxs;
 logic[1:0] pbmuxs, immhighlows;
-logic[38:0] ucodebank[18], fucodebank[18];
+logic[39:0] ucodebank[18], fucodebank[18];
 logic[3:0] regtowrite;
 logic regwe;
 logic[31:0] outmuxb, funca, funcb;
@@ -28,7 +26,10 @@ logic[4:0] fcount;
 logic internalreset;
 logic pspreset;
 logic notreset, notexecready, notmemready, noteq;
+wire[31:0] memdata, addressdatabus;
 
+always_comb	adbus = ((write & validdata) | validaddr) ? addressdatabus : 'hZ;
+always_comb addressdatabus = ~((write & validdata) | validaddr) ? adbus : 'hZ;
 always_comb
 	begin
 		regwe = fucodebank[fcount][0];
@@ -53,14 +54,14 @@ always_comb
 	end
 
 always notreset = ~reset;
-always notexecready = ~execready;
-always notmemready = ~memready;
+always execready = ~notexecready;
+always memready = notmemready;
 always noteq = ~eq;
 
 //From external: clk, reset
 //To external: validaddr, validdata, read, write
 //Bidirectional external: adbus
-busunit busfrontend(clk, notreset, qfull, memreq, memreqdir, memaddr, pcount, validaddr, validdata, read, write, incprefetch, toprefetch, memwait, adbus, memdata);
+busunit busfrontend(clk, notreset, qfull, memreq, memreqdir, memaddr, pcount, validaddr, validdata, read, write, incprefetch, toprefetch, memwait, addressdatabus, memdata);
 
 
 prefetcher prefetch(clk, notreset, instreq, incprefetch, toprefetch, qfull, tofetch);
@@ -74,20 +75,20 @@ always pcwe = condpc ? pccondout : rawpcwe;
 //10 - Less than
 //11 - Less than or equal to
 
-special_reg pc(clk, notreset, pcinc, pcdec, pcwe, writeback, pcount);
+ma10k_special_reg pc(clk, notreset, pcinc, pcdec, rawpcwe, writeback, pcount);
 
 always_comb
 	begin
-		pspinc = mode ? spinc : 0;
-		pspdec = mode ? spdec : 0;
-		sspinc = mode ? 0 : spinc;
-		sspdec = mode ? 0 : spdec;
-		pspwe = mode ? spwe : 0;
-		sspwe = mode ? 0 : spwe;
+		pspinc = mode ? spinc : 1'b0;
+		pspdec = mode ? spdec : 1'b0;
+		sspinc = mode ? 1'b0 : spinc;
+		sspdec = mode ? 1'b0 : spdec;
+		pspwe = mode ? spwe : 1'b0;
+		sspwe = mode ? 1'b0 : spwe;
 	end
 
-special_reg psp(clk, notreset, pspinc, pspdec, pspwe, writeback, progspoint);
-special_reg ssp(clk, notreset, sspinc, sspdec, sspwe, writeback, supspoint);
+ma10k_special_reg psp(clk, pspreset, pspinc, pspdec, pspwe, writeback, progspoint);
+ma10k_special_reg ssp(clk, notreset, sspinc, sspdec, sspwe, writeback, supspoint);
 
 ma10k_frontend decode(todecode, immediate, ucodebank);
 
