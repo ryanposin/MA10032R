@@ -1,5 +1,7 @@
 /* verilator lint_off UNOPTFLAT*/
 //Special register, for SP and PC
+//Input: clk, reset, increment, decrement, write enable, d
+//Output: q
 module ma10k_special_reg (input wire clk, input wire reset, input wire inc, input wire dec, input wire we, input logic[31:0] d, output logic[31:0] q);
 	always_ff @(negedge clk)
 		begin
@@ -35,6 +37,8 @@ module ob4inmux (input wire i0, input wire i1, input wire i2, input wire i3, inp
 endmodule
 
 //Register file with hardwired ZERO register (R0), R1-R15 are general purpose 
+//Input: clk, reset, portasel, portbsel, writesel, writeenable, writeinput[31:0]
+//Output: a, b 
 module regfile (input logic clk, input logic reset, input wire[3:0] portasel, input wire[3:0] portbsel, input wire[3:0] writesel, input wire we, input wire[31:0] writeinput, output logic[31:0] a, output logic[31:0] b);
 
 logic[31:0] registers[15:0];
@@ -176,78 +180,70 @@ module shifter_unit(input wire clk, input wire reset, input wire shiften, input 
 			endcase
 		end
 
-	always_latch
+	always_comb
 		begin
 			if (shiftstate == WAIT)
+				begin
 					shiftout = dout;
 					shiftdone = 0;
+				end
 			if (shiftstate == SDONE)
 				begin
-					dout = dout;
 					shiftdone = 1;
 					shiftout = dout;
 				end
 			else
-				dout = dout;
-				shiftdone = 0;
-
+				begin
+					shiftdone = 0;
+					shiftout = dout;
+				end
+			end
+		
+		always_ff @(negedge clk)
 			case(shifttype)
 				3'b000:	case (shiftstate) //Shift left w/o carry
-							SH1: dout = dout << 1;
-							SH2: dout = dout << 2;
-							SH4: dout = dout << 4;
-							SH8: dout = dout << 8;
-							SH16: dout = dout << 16;
-							default: dout = 32'b0;
+							SH1: dout <= dout << 1;
+							SH2: dout <= dout << 2;
+							SH4: dout <= dout << 4;
+							SH8: dout <= dout << 8;
+							SH16: dout <= dout << 16;
+							default: dout <= 32'b0;
 						endcase
 			
 				3'b001:	case (shiftstate) //Shift right w/o carry
-							SH1: dout = dout >> 1;
-							SH2: dout = dout >> 2;
-							SH4: dout = dout >> 4;
-							SH8: dout = dout << 8;
-							SH16: dout = dout >> 16;
-							default: dout = 32'b0;
+							SH1: dout <= dout >> 1;
+							SH2: dout <= dout >> 2;
+							SH4: dout <= dout >> 4;
+							SH8: dout <= dout << 8;
+							SH16: dout <= dout >> 16;
+							default: dout <= 32'b0;
 						endcase							
 				3'b010:	case (shiftstate) //Rotate right w/o carry
-							SH1: dout = {dout[0],dout[31:1]};
-							SH2: dout = {dout[1:0],dout[31:2]};
-							SH4: dout = {dout[3:0],dout[31:4]};
-							SH8: dout = {dout[7:0],dout[31:8]};
-							SH16: dout = {dout[15:0],dout[31:16]};
-							default: dout = 32'b0;
+							SH1: dout <= {dout[0],dout[31:1]};
+							SH2: dout <= {dout[1:0],dout[31:2]};
+							SH4: dout <= {dout[3:0],dout[31:4]};
+							SH8: dout <= {dout[7:0],dout[31:8]};
+							SH16: dout <= {dout[15:0],dout[31:16]};
+							default: dout <= 32'b0;
 						endcase
 				3'b011:	case (shiftstate) //Rotate left w/o carry
-							SH1: dout = {dout[30:0],dout[31]};
-							SH2: dout = {dout[29:0],dout[31:30]};
-							SH4: dout = {dout[27:0],dout[31:28]};
-							SH8: dout = {dout[23:0],dout[31:24]};
-							SH16: dout = {dout[15:0],dout[31:16]};
-							default: dout = 32'b0;
+							SH1: dout <= {dout[30:0],dout[31]};
+							SH2: dout <= {dout[29:0],dout[31:30]};
+							SH4: dout <= {dout[27:0],dout[31:28]};
+							SH8: dout <= {dout[23:0],dout[31:24]};
+							SH16: dout <= {dout[15:0],dout[31:16]};
+							default: dout <= 32'b0;
 						endcase
 				3'b100: case (shiftstate)
-							SH1: dout = {dout[31], dout[31:1]};
-							SH2: if (dout[31])
-									dout = {2'b1, dout[31:2]};
-								else
-									dout = {2'b0, dout[31:2]};
-							SH4: if (dout[31])
-									dout = {4'b1, dout[31:4]};
-								else
-									dout = {4'b0, dout[31:4]};
-							SH8: if (dout[31])
-									dout = {8'b1, dout[31:8]};
-								else
-									dout = {8'b0, dout[31:8]};
-							SH16: if (dout[31])
-									dout = {16'b1, dout[31:16]};
-								else
-									dout = {16'b0, dout[31:16]};
-							default: dout = 32'b0;
+							SH1: dout <= {dout[31], dout[31:1]};
+							SH2: dout <= {{2{dout[31]}}, dout[31:2]};
+							SH4: dout <= {{4{dout[31]}}, dout[31:4]};
+							SH8: dout <= {{8{dout[31]}}, dout[31:8]};
+							SH16: dout <= {{16{dout[31]}}, dout[31:16]};
+							default: dout <= 32'b0;
 						endcase
-				default: dout = 32'b0;
-				endcase
-		end
+				default: dout <= 32'b0;
+			endcase
 endmodule
 
 module multiplier_unit (input wire clk, input wire reset, input wire[31:0] a, input wire[31:0] b, input wire[1:0] muxas, input wire[1:0] muxbs, input wire[2:0] demuxs, input wire highlow, input wire accumulate, output logic[31:0] multout);
@@ -301,9 +297,10 @@ endmodule
 //Inputs: clk, reset, qfull, memreq, memreqdir, memaddr, programcounter
 //Outputs: validaddr, validdata, read, write, incprefetch, toprefetch, memwait
 //Inout: adbus, memdata
-module busunit(input logic clk, input logic reset, input logic qfull, input logic memreq, input logic memreqdir, input logic[31:0] memaddr, input logic[31:0] programcounter, output logic validaddr, output logic validdata, output logic read, output logic write, output logic incprefetch, output logic[31:0] toprefetch, output logic memwait, inout wire[31:0] adbus, inout wire[31:0] memdata);
+module busunit(input logic clk, input logic reset, input logic qfull, input logic memreq, input logic memreqdir, input logic[31:0] memaddr, input logic[31:0] programcounter, output logic validaddr, output logic validdata, output logic read, output logic write, output logic incprefetch, output logic[31:0] toprefetch, output logic memwait, inout logic[31:0] adbus, inout logic[31:0] memdata);
 
 	logic[2:0] busstate;
+	logic[31:0] memdatatemp;
 	localparam HIGHZ = 0;
 	localparam OUTPUTPC = 1;
 	localparam LATCHINST = 2;
@@ -324,6 +321,8 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 						busstate <= OUTPUTPC;
 					else if (memreq)
 						busstate <= OUTPUTMEM;
+					else
+						busstate <= OUTPUTPC;
 				OUTPUTPC: busstate <= LATCHINST;
 				LATCHINST: busstate <= HIGHZ;
 				OUTPUTMEM:	if (memreqdir) //1 = output
@@ -339,21 +338,22 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 				memwait = 1;
 			else
 				memwait = 0;
+				
 	always_comb	
 			case(busstate)
 			HIGHZ: begin
-						toprefetch = 0;
-						memdata = 'hZ;
-						adbus = 'hZ;
-						validaddr = 0;
-						validdata = 0;
-						read = 0;
-						write = 0;
-						incprefetch = 0;
+				toprefetch = 0;
+				memdatatemp = 'hZ;
+				adbus = 'hZ;
+				validaddr = 0;
+				validdata = 0;
+				read = 0;
+				write = 0;
+				incprefetch = 0;
 					end
 			OUTPUTPC: begin
 				toprefetch = 0;
-				memdata = 'hZ;
+				memdatatemp = 'hZ;
 				adbus = programcounter;
 				validaddr = 1;
 				validdata = 0;
@@ -363,7 +363,7 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 			end
 			LATCHINST: begin
 					toprefetch = adbus;
-					memdata = 'hZ;
+					memdatatemp = 'hZ;
 					adbus = 'hZ;
 					validaddr = 0;
 					validdata = 1;
@@ -373,27 +373,27 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 				end
 			OUTPUTMEM: begin
 				toprefetch = 0;
-				memdata = 'hZ;
+				memdatatemp = 'hZ;
 				adbus = memaddr;
 				validaddr = 1;
 				validdata = 0;
-				read = 0;
-				write = 1;
+				read = memreqdir;
+				write = memreqdir;
 				incprefetch = 0;
 			end
 			OUTPUTDATA: begin
 					toprefetch = 0;
-					memdata = 'hZ;
+					memdatatemp = 'hZ;
 					adbus = memdata;
-					validaddr = 0;
-					validdata = 1;
+					validaddr = memreqdir;
+					validdata = memreqdir;
 					read = 0;
 					write = 1;
 					incprefetch = 0;
 				end
 			LATCHDATA: begin
 					toprefetch = 0;
-					memdata = adbus;
+					memdatatemp = adbus;
 					adbus = 'hZ;
 					validaddr = 0;
 					validdata = 1;
@@ -401,8 +401,18 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 					write = 0;
 					incprefetch = 0;
 				end
+			default: begin
+				toprefetch = 0;
+				adbus = 'hZ;
+				memdatatemp ='hZ;
+				validaddr = 0;
+				validdata = 0;
+				read = 0;
+				write = 0;
+				incprefetch = 0;
+			end
 			endcase
-
+	always_comb memdata = memreqdir ? 'hZ : memdatatemp; 
 endmodule
 
 //Prefetch unit
@@ -419,6 +429,12 @@ module prefetcher(input logic clk, input logic reset, input logic instreq, input
 	localparam Q4 = 4;
 	localparam Q5 = 5;
 	localparam QFULL = 6;
+	
+	always_comb
+		if (ftrack == QFULL)
+			qfull = 1;
+		else
+			qfull = 0;
 	
 	always_ff @(posedge clk)
 		begin
@@ -564,8 +580,8 @@ endmodule
 
 //Fetch unit
 //Inputs: clk, reset, ready, insin
-//Outputs: insout
-module fetcher(input logic clk, input logic reset, input logic ready, input logic[31:0] insin, output logic[31:0] insout);
+//Outputs: insreq, insout
+module fetcher(input logic clk, input logic reset, input logic ready, input logic[31:0] insin, output logic instreq, output logic[31:0] instout);
 	logic fetchstate;
 	localparam FSTALL = 1'b0;
 	localparam FDECODE = 1'b1;
@@ -581,26 +597,51 @@ module fetcher(input logic clk, input logic reset, input logic ready, input logi
 						fetchstate <= FDECODE;
 				FDECODE:
 					begin
-						insout <= insin;
 						if (~ready)
 							fetchstate <= FSTALL;
 						else
 							fetchstate <= FDECODE;
 					end
-			endcase
+			endcase			
 		end
+		
+		always_comb
+			if (fetchstate == FSTALL)
+				begin
+					instreq = 0;
+					instout = 0;
+				end
+			else
+				begin
+					instreq = 1;
+					instout = insin;
+				end
+endmodule
+
+
+//Microcode
+//Inputs: Pointer
+//Outputs: Microcode
+module microcode_rom(input logic[7:0] pointer, output logic[39:0] microcode_line);
+	//(*ramstyle = "M20K"*)
+	logic[39:0] microcode[150:0];
+	initial $readmemh("microcode.txt", microcode);
+	
+	always_comb microcode_line = microcode[pointer][39:0];
 endmodule
 
 //Decoder
 //Inputs: instruction
-//Outputs: immediate[15:0], icode[39:0]
-module ma10k_frontend(input logic[31:0] instruction, output logic[15:0] immediate, output logic[39:0] icode[17:0]);
+//Outputs: immediate[15:0], opcode_pointer[6:0]
+module ma10k_frontend(input logic[31:0] instruction, output logic[15:0] immediate, output logic[6:0] opcode_pointer);
 	
 	always_comb
-		if (instruction[19:17] == 'b010)
-			immediate = {instruction[31:20], instruction[11:8]};
-		else
-			immediate = {instruction[31:20], instruction[3:0]};
+		begin
+			if (instruction[19:17] == 'b010)
+				immediate = {instruction[31:20], instruction[11:8]};
+			else
+				immediate = {instruction[31:20], instruction[3:0]};
+		end
 
 	//ALU and shift
 	localparam SUB = 8'h00;
@@ -672,76 +713,73 @@ module ma10k_frontend(input logic[31:0] instruction, output logic[15:0] immediat
 	localparam GPTIMER = 8'h79;
 	localparam RESET = 8'h7A;
 	
-	logic[39:0] microcode[88:0];
-	initial $readmemh("microcode.txt", microcode);
-
 	always_comb
 		case (instruction[19:12])
-			SUB: icode[0] = microcode[2];
-			ADD: icode[0] = microcode[3];
-			SHL: icode[0] = microcode[4];
-			SHR: icode[0] = microcode[5];
-			ASR: icode[0] = microcode[6];
-			ROTL: icode[0] = microcode[7];
-			ROTR: icode[0] = microcode[8];
-			NOT: icode[0] = microcode[9];
-			AND: icode[0] = microcode[10];
-			OR: icode[0] = microcode[11];
-			XOR: icode[0] = microcode[12];
-			NAND: icode[0] = microcode[13];
-			NOR: icode[0] = microcode[14];
-			XNOR: icode[0] = microcode[15];
-			SUP: icode[2:0] = microcode[18:16];
-			SUBI: icode[0] = microcode[19];
-			ADDI: icode[0] = microcode[20];
-			MULTQW: icode[1:0] = microcode[22:21];
-			MULTHW: icode[4:0] = microcode[27:23];
-			MULTW: icode[16:0] = microcode[44:28];
-			MULTR: icode[0] = microcode[45];
-			RHMULT: icode[0] = microcode[46];
-			BREQ: icode[1:0] = microcode[48:47];
-			BRNEQ: icode[1:0] = microcode[50:49];
-			BRLT: icode[1:0] = microcode[52:51];
-			BRLTEQ: icode[1:0] = microcode[54:53];
-			JUMPREL: icode[0] = microcode[55];
-			JUMPR: icode[0] = microcode[56];
-			JUMPI: icode[0] = microcode[57];
-			CALL: icode[1:0] = microcode[59:58];
-			RET: icode[1:0] = microcode[61:60];
-			LRR: icode[0] = microcode[62];
-			LRI: icode[0] = microcode[63];
-			LSPR: icode[0] = microcode[64];
-			LUI: icode[0] = microcode[65];
-			LLI: icode[0] = microcode[66];
-			SSPR: icode[0] = microcode[67];
-			STR: icode[0] = microcode[68];
-			STI: icode[0] = microcode[69];
-			LREL: icode[0] = microcode[70];
-			SREL: icode[0] = microcode[71];
-			PUSH: icode[1:0] = microcode[73:72];
-			POP: icode[1:0] = microcode[75:74];
-			STQW: icode[0] = microcode[76];
-			LDQW: icode[0] = microcode[77];
-			STHW: icode[0] = microcode[78];
-			LDHW: icode[0] = microcode[79];
-			PRG: icode[3:0] = microcode[83:80];
-			RESPSP: icode[0] = microcode[84];
-			SPSP:	icode[0] = microcode[85];
-			GPSP:	icode[0] = microcode[86];
-			SCOP: icode[0] = microcode[87];
-			GCOP: icode[0] = microcode[88];
-			//EI: icode[0] = microcode[89];
-			//DI: icode[0] = microcode[90];
-			//GPTIMER: icode[0] = microcode[90];
-			//RESET: icode[0] = microcode[91];
-			default: icode = '{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+			SUB: opcode_pointer = 2;
+			ADD: opcode_pointer = 3;
+			SHL: opcode_pointer = 4;
+			SHR: opcode_pointer = 5;
+			ASR: opcode_pointer = 6;
+			ROTL: opcode_pointer  = 7;
+			ROTR: opcode_pointer = 8;
+			NOT: opcode_pointer = 9;
+			AND: opcode_pointer = 10;
+			OR: opcode_pointer = 11;
+			XOR: opcode_pointer = 12;
+			NAND: opcode_pointer = 13;
+			NOR: opcode_pointer = 14;
+			XNOR: opcode_pointer = 15;
+			SUP: opcode_pointer = 16;
+			SUBI: opcode_pointer = 19;
+			ADDI: opcode_pointer = 20;
+			MULTQW: opcode_pointer = 21;
+			MULTHW: opcode_pointer = 23;
+			MULTW: opcode_pointer = 28;
+			MULTR: opcode_pointer = 45;
+			RHMULT: opcode_pointer = 46;
+			BREQ: opcode_pointer = 47;
+			BRNEQ: opcode_pointer = 49;
+			BRLT: opcode_pointer = 51;
+			BRLTEQ: opcode_pointer = 53;
+			JUMPREL: opcode_pointer = 55;
+			JUMPR: opcode_pointer = 56;
+			JUMPI: opcode_pointer = 57;
+			CALL: opcode_pointer = 58;
+			RET: opcode_pointer = 60;
+			LRR: opcode_pointer = 62;
+			LRI: opcode_pointer = 63;
+			LSPR: opcode_pointer = 64;
+			LUI: opcode_pointer = 65;
+			LLI: opcode_pointer = 66;
+			SSPR: opcode_pointer = 67;
+			STR: opcode_pointer = 68;
+			STI: opcode_pointer = 69;
+			LREL: opcode_pointer = 70;
+			SREL: opcode_pointer = 71;
+			PUSH: opcode_pointer = 72;
+			POP: opcode_pointer = 74;
+			STQW: opcode_pointer = 76;
+			LDQW: opcode_pointer = 77;
+			STHW: opcode_pointer = 78;
+			LDHW: opcode_pointer = 79;
+			PRG: opcode_pointer = 80;
+			RESPSP: opcode_pointer = 84;
+			SPSP:	opcode_pointer = 85;
+			GPSP:	opcode_pointer = 86;
+			SCOP: opcode_pointer = 87;
+			GCOP: opcode_pointer = 88;
+			EI: opcode_pointer = 89;
+			DI: opcode_pointer = 90;
+			GPTIMER: opcode_pointer = 91;
+			RESET: opcode_pointer = 91;
+			default: opcode_pointer = 0;
 		endcase
 endmodule
 
 //Pipeline break
 //Inputs: clk, reset, stall, icode[18], a, b, regtowrite
 //Outputs: icodefunc, afunc, bfunc, regtowritefunc
-module pipebreak(input logic clk, input logic reset, input logic stall, input logic[39:0] icode[18], input logic[31:0] a, input logic[31:0] b, input logic[3:0] regtowrite, output logic[39:0] icodefunc[17:0], output logic[31:0] afunc, output logic[31:0] bfunc, output logic[3:0] regtowritefunc);
+module pipebreak(input logic clk, input logic reset, input logic stall, input logic[6:0] icode_pointer, input logic[31:0] a, input logic[31:0] b, input logic[3:0] regtowrite, output logic[6:0] icode_pointero, output logic[31:0] afunc, output logic[31:0] bfunc, output logic[3:0] regtowritefunc);
 	always_ff @(posedge clk)
 		begin
 			if (reset)
@@ -750,30 +788,41 @@ module pipebreak(input logic clk, input logic reset, input logic stall, input lo
 				if (stall)
 					begin
 						{afunc, bfunc, regtowritefunc} <= {afunc, bfunc, regtowritefunc};
-						icodefunc <= icodefunc;
+						icode_pointero <= icode_pointero;
 					end
 				else 
 					begin
 						{afunc, bfunc, regtowritefunc} <= {a, b, regtowrite};
-						icodefunc <= icode;
+						icode_pointero <= icode_pointer;
 					end
 		end
 endmodule
 
 //Execution unit
-//Inputs: clk, reset, funcsel, ina, inb, icode[18]
-//Outputs: execout, stalldispatch
-module execute_unit(input logic clk, input logic reset, input logic[1:0] funcsel, input logic[31:0] ina, input logic[31:0] inb, input logic[39:0] icode[17:0], output logic[31:0] execout, output logic stalldispatch, output logic lt, output logic eq, output logic[4:0] executec);
+//Inputs: clk, reset, funcsel, ina, inb, pointer[6:0]
+//Outputs: execout, stalldispatch, lt, eq, executec, fucode
+module execute_unit(input logic clk, input logic reset, input logic newmicrocode, input logic[1:0] funcsel, input logic[31:0] ina, input logic[31:0] inb, input logic[6:0] pointer,
+							output logic[31:0] execout, output logic stalldispatch, output logic lt, output logic eq, output logic[4:0] executec, output logic[39:0] fucode);
+	logic[39:0] microcode_line, microcode_line_stable;
 	logic[31:0] aluout, shiftout, multout;
-	logic shiftdone, shiften, alufunctype, multdone, highlow, accumulate, shiftstalldispatch;
+	logic shiftdone, shiften, alufunctype, multdone, highlow, accumulate, shiftstalldispatch, multreset;
 	logic[1:0] multmuxas, multmuxbs;
 	logic[2:0] alufunc,multdemuxs;
+	logic[7:0] linenumber;
 
+	microcode_rom microcode(linenumber, microcode_line);
+	
+	always_comb fucode = microcode_line;
+	always_comb linenumber = pointer + {3'b0, executec};
+	always_ff @(negedge clk)
+		begin
+			if(reset | newmicrocode | microcode_line_stable[30])
+				executec <= 0;
+			else
+				executec <= executec + 1'b1;
+		end
 	always_ff @(posedge clk)
-		if(icode[executec][31])
-			executec <= executec + 1'b1;
-		else
-			executec <= 0;
+		microcode_line_stable <= microcode_line;
 	always_comb
 		case (funcsel)
 			2'b00: begin
@@ -784,19 +833,21 @@ module execute_unit(input logic clk, input logic reset, input logic[1:0] funcsel
 				accumulate = 0;
 				stalldispatch = 0;
 				shiften = 0;
-				alufunc = icode[0][19:17];
-				alufunctype = icode[0][20];
+				alufunc = microcode_line_stable[19:17];
+				alufunctype = microcode_line_stable[20];
+				multreset = 0;
 			end
 			2'b01: begin
 				execout = multout;
-				multmuxas = icode[executec][22:21];
-				multmuxbs = icode[executec][24:23];
-				multdemuxs = icode[executec][27:25];
-				accumulate = icode[executec][28];
-				stalldispatch = icode[executec][31];
+				multmuxas = microcode_line_stable[22:21];
+				multmuxbs = microcode_line_stable[24:23];
+				multdemuxs = microcode_line_stable[27:25];
+				accumulate = microcode_line_stable[28];
+				stalldispatch = microcode_line_stable[31];
 				shiften = 0;
 				alufunc = 0;
 				alufunctype = 0;
+				multreset = reset | microcode_line_stable[30];
 			end
 			2'b10: begin
 				execout = shiftout;
@@ -808,43 +859,46 @@ module execute_unit(input logic clk, input logic reset, input logic[1:0] funcsel
 				shiften = 1;
 				alufunc = 0;
 				alufunctype = 0;
+				multreset = 0;
 			end
 			default: begin
-							execout = 0;
-							multmuxas = 0;
-							multmuxbs = 0;
-							multdemuxs = 0;
-							accumulate = 0;
-							stalldispatch = 0;
-							shiften = 0;
-							alufunc = 0;
-							alufunctype = 0;
-						end
+				execout = 0;
+				multmuxas = 0;
+				multmuxbs = 0;
+				multdemuxs = 0;
+				accumulate = 0;
+				stalldispatch = 0;
+				shiften = 0;
+				alufunc = 0;
+				alufunctype = 0;
+				end
 		endcase
 
 	alumod alu(alufunc, alufunctype, ina, inb, aluout, lt, eq);
-	multiplier_unit mult(clk, reset, ina, inb, multmuxas, multmuxbs, multdemuxs, highlow, accumulate, multout);
-	shifter_unit shifter(clk, reset, shiften, ina, icode[executec][19:17], inb[4:0], shiftstalldispatch, shiftdone, shiftout);
+	multiplier_unit mult(clk, multreset, ina, inb, multmuxas, multmuxbs, multdemuxs, highlow, accumulate, multout);
+	shifter_unit shifter(clk, reset, shiften, ina, microcode_line_stable[19:17], inb[4:0], shiftstalldispatch, shiftdone, shiftout);
 endmodule
 
 //Memory access unit
 //Inputs: fromexecute, portb, addrsel, datasel, requestdbus, dbusreqdir, buswait
 //Outputs: dbusreq, dbusdir, addr, towriteback, stalldispatch 
 //Inout: data
-module mem_access_unit(input logic[31:0] fromexecute, input logic[31:0] portb, input logic addrsel, input logic datasel, input logic requestdbus, input logic dbusreqdir, input logic buswait, output logic dbusreq, output logic dbusdir, output logic[31:0] addr, output logic[31:0] towriteback, output logic stalldispatch, inout wire[31:0] data);
+module mem_access_unit(input logic[31:0] fromexecute, input logic[31:0] portb, input logic addrsel, input logic datasel, input logic requestdbus, input logic dbusreqdir, input logic buswait, output logic dbusreq, output logic dbusdir, output logic[31:0] addr, output logic[31:0] towriteback, output logic stalldispatch, inout logic[31:0] data);
+	/* verilator lint_off ALWCOMBORDER */
 	always_comb
 		begin
 			dbusreq = requestdbus;
 			dbusdir = dbusreqdir;
 			addr = requestdbus ? (addrsel ? portb : fromexecute) : 32'hZ;
-			towriteback = requestdbus ? ( dbusreqdir ? 32'hZ : data) : fromexecute;
-			data = requestdbus ? (datasel ? portb : fromexecute) : 32'hZ;
+			towriteback = dbusreqdir ? 32'hZ : data;
+			data = dbusreqdir ? (datasel ? portb : fromexecute) : 'hZ;
 		
 			if (requestdbus)
 				stalldispatch = buswait;
 			else
 				stalldispatch = 0;
 		end
+	/* verilator lint_on ALWCOMBORDER */
 endmodule
 
 

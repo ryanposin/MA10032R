@@ -39,6 +39,7 @@ int main(void) {
 	{"PCCOND", 1ull << 35, 35},
 	{"RESET", 1ull << 37, 37},
 	{"PSPRESET", 1ull << 38, 38},
+	{"PRGMODE", 1ull << 39, 39}
 	{NULL, 0ull, 0}
     };
 
