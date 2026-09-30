@@ -21,7 +21,11 @@ module processor_core(input logic clk, input logic reset,
 	/* verilator lint_off ALWCOMBORDER */
 	always_comb
 		begin
-			regwe = icodeo[0];
+			if (requestdbus)
+				regwe = memfinished ? icodeo[0] : 0;
+			else
+				regwe = icode[0];
+
 			pcinc = incpcfetch; //(icodeo[1] & pipeready & incpcfetch);
 			pcdec = icodeo[2];
 			spinc = icodeo[3];
