@@ -126,17 +126,31 @@ module shifter_unit(input wire clk, input wire reset, input wire shiften, input 
 			case (shiftstate)
 				WAIT: if (shiften)
 					begin
-						stalldispatch <= 1;
 						if (shiftamt[4] == 1'b1)
-							shiftstate <= SH16;
+							begin
+								shiftstate <= SH16;
+								stalldispatch <= 1;
+							end
 						else if (shiftamt[4:3] == 2'b01)
-							shiftstate <= SH8;
+							begin
+								shiftstate <= SH8;
+								stalldispatch <= 1;
+							end
 						else if (shiftamt[4:2] == 3'b001)
-							shiftstate <= SH4;
+							begin
+								shiftstate <= SH4;
+								stalldispatch <= 1;
+							end
 						else if (shiftamt[4:1] == 4'b0001)
-							shiftstate <= SH2;
+							begin
+								shiftstate <= SH2;
+								stalldispatch <= 1;
+							end
 						else if (shiftamt[4:0] == 5'b00001)
-							shiftstate <= SH1;
+							begin
+								shiftstate <= SH1;
+								stalldispatch <= 1;
+							end
 						else
 							shiftstate <= SDONE;
 					end
@@ -200,50 +214,54 @@ module shifter_unit(input wire clk, input wire reset, input wire shiften, input 
 			end
 		
 		always_ff @(negedge clk)
-			case(shifttype)
-				3'b000:	case (shiftstate) //Shift left w/o carry
-							SH1: dout <= dout << 1;
-							SH2: dout <= dout << 2;
-							SH4: dout <= dout << 4;
-							SH8: dout <= dout << 8;
-							SH16: dout <= dout << 16;
-							default: dout <= 32'b0;
-						endcase
-			
-				3'b001:	case (shiftstate) //Shift right w/o carry
-							SH1: dout <= dout >> 1;
-							SH2: dout <= dout >> 2;
-							SH4: dout <= dout >> 4;
-							SH8: dout <= dout << 8;
-							SH16: dout <= dout >> 16;
-							default: dout <= 32'b0;
-						endcase							
-				3'b010:	case (shiftstate) //Rotate right w/o carry
-							SH1: dout <= {dout[0],dout[31:1]};
-							SH2: dout <= {dout[1:0],dout[31:2]};
-							SH4: dout <= {dout[3:0],dout[31:4]};
-							SH8: dout <= {dout[7:0],dout[31:8]};
-							SH16: dout <= {dout[15:0],dout[31:16]};
-							default: dout <= 32'b0;
-						endcase
-				3'b011:	case (shiftstate) //Rotate left w/o carry
-							SH1: dout <= {dout[30:0],dout[31]};
-							SH2: dout <= {dout[29:0],dout[31:30]};
-							SH4: dout <= {dout[27:0],dout[31:28]};
-							SH8: dout <= {dout[23:0],dout[31:24]};
-							SH16: dout <= {dout[15:0],dout[31:16]};
-							default: dout <= 32'b0;
-						endcase
-				3'b100: case (shiftstate)
-							SH1: dout <= {dout[31], dout[31:1]};
-							SH2: dout <= {{2{dout[31]}}, dout[31:2]};
-							SH4: dout <= {{4{dout[31]}}, dout[31:4]};
-							SH8: dout <= {{8{dout[31]}}, dout[31:8]};
-							SH16: dout <= {{16{dout[31]}}, dout[31:16]};
-							default: dout <= 32'b0;
-						endcase
-				default: dout <= 32'b0;
-			endcase
+			begin
+				if (shiftstate == WAIT)
+					dout <= a;
+				case(shifttype)
+					3'b000:	case (shiftstate) //Shift left w/o carry
+								SH1: dout <= dout << 1;
+								SH2: dout <= dout << 2;
+								SH4: dout <= dout << 4;
+								SH8: dout <= dout << 8;
+								SH16: dout <= dout << 16;
+								default: dout <= 32'b0;
+							endcase
+				
+					3'b001:	case (shiftstate) //Shift right w/o carry
+								SH1: dout <= dout >> 1;
+								SH2: dout <= dout >> 2;
+								SH4: dout <= dout >> 4;
+								SH8: dout <= dout << 8;
+								SH16: dout <= dout >> 16;
+								default: dout <= 32'b0;
+							endcase							
+					3'b010:	case (shiftstate) //Rotate right w/o carry
+								SH1: dout <= {dout[0],dout[31:1]};
+								SH2: dout <= {dout[1:0],dout[31:2]};
+								SH4: dout <= {dout[3:0],dout[31:4]};
+								SH8: dout <= {dout[7:0],dout[31:8]};
+								SH16: dout <= {dout[15:0],dout[31:16]};
+								default: dout <= 32'b0;
+							endcase
+					3'b011:	case (shiftstate) //Rotate left w/o carry
+								SH1: dout <= {dout[30:0],dout[31]};
+								SH2: dout <= {dout[29:0],dout[31:30]};
+								SH4: dout <= {dout[27:0],dout[31:28]};
+								SH8: dout <= {dout[23:0],dout[31:24]};
+								SH16: dout <= {dout[15:0],dout[31:16]};
+								default: dout <= 32'b0;
+							endcase
+					3'b100: case (shiftstate)
+								SH1: dout <= {dout[31], dout[31:1]};
+								SH2: dout <= {{2{dout[31]}}, dout[31:2]};
+								SH4: dout <= {{4{dout[31]}}, dout[31:4]};
+								SH8: dout <= {{8{dout[31]}}, dout[31:8]};
+								SH16: dout <= {{16{dout[31]}}, dout[31:16]};
+								default: dout <= 32'b0;
+							endcase
+					default: dout <= 32'b0;
+				endcase
+			end
 endmodule
 
 module multiplier_unit (input wire clk, input wire reset, input wire[31:0] a, input wire[31:0] b, input wire[1:0] muxas, input wire[1:0] muxbs, input wire[2:0] demuxs, input wire highlow, input wire accumulate, output logic[31:0] multout);
@@ -295,18 +313,18 @@ endmodule
 
 //Bus unit
 //Inputs: clk, reset, qfull, memreq, memreqdir, memaddr, programcounter
-//Outputs: validaddr, validdata, read, write, incprefetch, toprefetch, memwait
+//Outputs: validaddr, validdata, read, write, incprefetch, toprefetch, memwait, incpc
 //Inout: adbus, memdata
-module busunit(input logic clk, input logic reset, input logic qfull, input logic memreq, input logic memreqdir, input logic[31:0] memaddr, input logic[31:0] programcounter, output logic validaddr, output logic validdata, output logic read, output logic write, output logic incprefetch, output logic[31:0] toprefetch, output logic memwait, inout logic[31:0] adbus, inout logic[31:0] memdata);
+module busunit(input logic clk, input logic reset, input logic qfull, input logic memreq, input logic memreqdir, input logic[31:0] memaddr, input logic[31:0] programcounter, output logic validaddr, output logic validdata, output logic read, output logic write, output logic incprefetch, output logic[31:0] toprefetch, output logic memwait, output logic incpc, output logic memfinished, inout logic[31:0] adbus, inout logic[31:0] memdata);
 
 	logic[2:0] busstate;
 	logic[31:0] memdatatemp;
-	localparam HIGHZ = 0;
-	localparam OUTPUTPC = 1;
-	localparam LATCHINST = 2;
-	localparam OUTPUTMEM = 3;
-	localparam OUTPUTDATA = 4;
-	localparam LATCHDATA = 5;
+	localparam HIGHZ = 3'h0;
+	localparam OUTPUTPC = 3'h1;
+	localparam LATCHINST = 3'h2;
+	localparam OUTPUTMEM = 3'h3;
+	localparam OUTPUTDATA = 3'h4;
+	localparam LATCHDATA = 3'h5;
 
 	always_ff @(posedge clk)
 		begin
@@ -324,13 +342,36 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 					else
 						busstate <= OUTPUTPC;
 				OUTPUTPC: busstate <= LATCHINST;
-				LATCHINST: busstate <= HIGHZ;
+				LATCHINST: if (~memreq & qfull)
+						busstate <= HIGHZ;
+					else if (~memreq & ~qfull)
+						busstate <= OUTPUTPC;
+					else if (memreq)
+						busstate <= OUTPUTMEM;
+					else
+						busstate <= OUTPUTPC;
+
 				OUTPUTMEM:	if (memreqdir) //1 = output
 							busstate <= OUTPUTDATA;
 						else //0 = input
 							busstate <= LATCHDATA;
-				OUTPUTDATA: busstate <= HIGHZ;
-				LATCHDATA: busstate <= HIGHZ;
+				OUTPUTDATA: if (~memreq & qfull)
+						busstate <= HIGHZ;
+					else if (~memreq & ~qfull)
+						busstate <= OUTPUTPC;
+					else if (memreq)
+						busstate <= OUTPUTMEM;
+					else
+						busstate <= OUTPUTPC;
+				LATCHDATA: if (~memreq & qfull)
+						busstate <= HIGHZ;
+					else if (~memreq & ~qfull)
+						busstate <= OUTPUTPC;
+					else if (memreq)
+						busstate <= OUTPUTMEM;
+					else
+						busstate <= OUTPUTPC;
+				default: busstate <= HIGHZ;
 			endcase
 		end	
 	always_comb
@@ -350,6 +391,8 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 				read = 0;
 				write = 0;
 				incprefetch = 0;
+				incpc = 0;
+				memfinished = 0;
 					end
 			OUTPUTPC: begin
 				toprefetch = 0;
@@ -360,6 +403,8 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 				read = 1;
 				write = 0;
 				incprefetch = 0;
+				incpc = 0;
+				memfinished = 0;
 			end
 			LATCHINST: begin
 					toprefetch = adbus;
@@ -370,6 +415,8 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 					read = 1;
 					write = 0;
 					incprefetch = 1;
+					incpc = 1;
+					memfinished = 0;
 				end
 			OUTPUTMEM: begin
 				toprefetch = 0;
@@ -380,6 +427,8 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 				read = memreqdir;
 				write = memreqdir;
 				incprefetch = 0;
+				incpc = 0;
+				memfinished = 0;
 			end
 			OUTPUTDATA: begin
 					toprefetch = 0;
@@ -390,6 +439,8 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 					read = 0;
 					write = 1;
 					incprefetch = 0;
+					incpc = 0;
+					memfinished = 1;
 				end
 			LATCHDATA: begin
 					toprefetch = 0;
@@ -400,6 +451,8 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 					read = 1;
 					write = 0;
 					incprefetch = 0;
+					incpc = 0;
+					memfinished = 1;
 				end
 			default: begin
 				toprefetch = 0;
@@ -410,15 +463,17 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 				read = 0;
 				write = 0;
 				incprefetch = 0;
+				incpc = 0;
+				memfinished = 0;
 			end
 			endcase
-	always_comb memdata = memreqdir ? 'hZ : memdatatemp; 
+	always_comb memdata = memreqdir ? 'hZ : adbus; 
 endmodule
 
 //Prefetch unit
 //Inputs: clk, reset, instreq, instadd, insttoadd
 //Outputs: qfull, tofetch
-module prefetcher(input logic clk, input logic reset, input logic instreq, input logic instadd, input logic[31:0] insttoadd, output logic qfull, output logic[31:0] tofetch);
+module prefetcher(input logic clk, input logic reset, input logic instreq, input logic instadd, input logic[31:0] insttoadd, output logic qempty, output logic qfull, output logic[31:0] tofetch);
 	logic[2:0] ftrack;
 	logic[2:0] instqcount[5:0];
 	logic[31:0] instq[6];
@@ -431,18 +486,23 @@ module prefetcher(input logic clk, input logic reset, input logic instreq, input
 	localparam QFULL = 6;
 	
 	always_comb
-		if (ftrack == QFULL)
-			qfull = 1;
-		else
-			qfull = 0;
+		begin
+			if (ftrack == QFULL)
+				qfull = 1;
+			else
+				qfull = 0;
+
+			if (ftrack == QEMPTY)
+				qempty = 1;
+			else
+				qempty = 0;
+		end
 	
 	always_ff @(posedge clk)
 		begin
 			if (reset)
 				begin
 					ftrack <= QEMPTY;
-					instqcount <= '{'b111,'b111,'b111,'b111,'b111,'b111};
-					instq <= '{0,0,0,0,0,0};
 				end
 			case (ftrack)
 				QEMPTY:
@@ -490,6 +550,15 @@ module prefetcher(input logic clk, input logic reset, input logic instreq, input
 					else if (~instadd & instreq)
 						ftrack <= Q5;
 			endcase
+		end
+
+	always_ff @(negedge clk)
+		begin
+			if (reset)
+				begin
+					instqcount <= '{'b111,'b111,'b111,'b111,'b111,'b111};
+					instq <= '{0,0,0,0,0,0};
+				end
 
 			if (instreq)
 				begin
@@ -497,48 +566,54 @@ module prefetcher(input logic clk, input logic reset, input logic instreq, input
 						begin
 							instqcount[0] <= 3'b111;
 							tofetch <= instq[0];
+							instq[0] <= 0;
 						end
-					else if (instqcount[0] != 0 | instqcount[0] != 'b111)
+					else if (instqcount[0] != 0 & instqcount[0] != 'b111)
 						instqcount[0] <= instqcount[0] - 1;
 				
 					if (instqcount[1] == 0)
 						begin
 							instqcount[1] <= 3'b111;
 							tofetch <= instq[1];
+							instq[1] <= 0;
 						end
-					else if (instqcount[1] != 0 | instqcount[1] != 'b111)
+					else if (instqcount[1] != 0 & instqcount[1] != 'b111)
 						instqcount[1] <= instqcount[1] - 1;
 
 					if (instqcount[2] == 0)
 						begin
 							instqcount[2] <= 3'b111;
 							tofetch <= instq[2];
+							instq[2] <= 0;
 						end
-					else if (instqcount[2] != 0 | instqcount[2] != 'b111)
+					else if (instqcount[2] != 0 & instqcount[2] != 'b111)
 						instqcount[2] <= instqcount[2] - 1;
 
 					if (instqcount[3] == 0)
 						begin
 							instqcount[3] <= 3'b111;
 							tofetch <= instq[3];
+							instq[3] <= 0;
 						end
-					else if (instqcount[3] != 0 | instqcount[3] != 'b111)
+					else if (instqcount[3] != 0 & instqcount[3] != 'b111)
 						instqcount[3] <= instqcount[3] - 1;
 
 					if (instqcount[4] == 0)
 						begin
 							instqcount[4] <= 3'b111;
 							tofetch <= instq[4];
+							instq[4] <= 0;
 						end
-					else if (instqcount[4] != 0 | instqcount[4] != 'b111)
+					else if (instqcount[4] != 0 & instqcount[4] != 'b111)
 						instqcount[4] <= instqcount[4] - 1;
 
 					if (instqcount[5] == 0)
 						begin
 							instqcount[5] <= 3'b111;
 							tofetch <= instq[5];
+							instq[5] <= 0;
 						end
-					else if (instqcount[5] != 0 | instqcount[5] != 'b111)
+					else if (instqcount[5] != 0 & instqcount[5] != 'b111)
 						instqcount[5] <= instqcount[5] - 1;
 
 				end
@@ -605,16 +680,15 @@ module fetcher(input logic clk, input logic reset, input logic ready, input logi
 			endcase			
 		end
 		
-		always_comb
+		always_ff @(posedge clk)
 			if (fetchstate == FSTALL)
 				begin
-					instreq = 0;
-					instout = 0;
+					instreq <= 0;
 				end
 			else
 				begin
-					instreq = 1;
-					instout = insin;
+					instreq <= 1;
+					instout <= insin;
 				end
 endmodule
 
@@ -715,62 +789,62 @@ module ma10k_frontend(input logic[31:0] instruction, output logic[15:0] immediat
 	
 	always_comb
 		case (instruction[19:12])
-			SUB: opcode_pointer = 2;
-			ADD: opcode_pointer = 3;
-			SHL: opcode_pointer = 4;
-			SHR: opcode_pointer = 5;
-			ASR: opcode_pointer = 6;
-			ROTL: opcode_pointer  = 7;
-			ROTR: opcode_pointer = 8;
-			NOT: opcode_pointer = 9;
-			AND: opcode_pointer = 10;
-			OR: opcode_pointer = 11;
-			XOR: opcode_pointer = 12;
-			NAND: opcode_pointer = 13;
-			NOR: opcode_pointer = 14;
-			XNOR: opcode_pointer = 15;
-			SUP: opcode_pointer = 16;
-			SUBI: opcode_pointer = 19;
-			ADDI: opcode_pointer = 20;
-			MULTQW: opcode_pointer = 21;
-			MULTHW: opcode_pointer = 23;
-			MULTW: opcode_pointer = 28;
-			MULTR: opcode_pointer = 45;
-			RHMULT: opcode_pointer = 46;
-			BREQ: opcode_pointer = 47;
-			BRNEQ: opcode_pointer = 49;
-			BRLT: opcode_pointer = 51;
-			BRLTEQ: opcode_pointer = 53;
-			JUMPREL: opcode_pointer = 55;
-			JUMPR: opcode_pointer = 56;
-			JUMPI: opcode_pointer = 57;
-			CALL: opcode_pointer = 58;
-			RET: opcode_pointer = 60;
-			LRR: opcode_pointer = 62;
-			LRI: opcode_pointer = 63;
-			LSPR: opcode_pointer = 64;
-			LUI: opcode_pointer = 65;
-			LLI: opcode_pointer = 66;
-			SSPR: opcode_pointer = 67;
-			STR: opcode_pointer = 68;
-			STI: opcode_pointer = 69;
-			LREL: opcode_pointer = 70;
-			SREL: opcode_pointer = 71;
-			PUSH: opcode_pointer = 72;
-			POP: opcode_pointer = 74;
-			STQW: opcode_pointer = 76;
-			LDQW: opcode_pointer = 77;
-			STHW: opcode_pointer = 78;
-			LDHW: opcode_pointer = 79;
-			PRG: opcode_pointer = 80;
-			RESPSP: opcode_pointer = 84;
-			SPSP:	opcode_pointer = 85;
-			GPSP:	opcode_pointer = 86;
-			SCOP: opcode_pointer = 87;
-			GCOP: opcode_pointer = 88;
-			EI: opcode_pointer = 89;
-			DI: opcode_pointer = 90;
-			GPTIMER: opcode_pointer = 91;
+			SUB: opcode_pointer = 1;
+			ADD: opcode_pointer = 2;
+			SHL: opcode_pointer = 3;
+			SHR: opcode_pointer = 4;
+			ASR: opcode_pointer = 5;
+			ROTL: opcode_pointer  = 6;
+			ROTR: opcode_pointer = 7;
+			NOT: opcode_pointer = 8;
+			AND: opcode_pointer = 9;
+			OR: opcode_pointer = 10;
+			XOR: opcode_pointer = 11;
+			NAND: opcode_pointer = 12;
+			NOR: opcode_pointer = 13;
+			XNOR: opcode_pointer = 14;
+			SUP: opcode_pointer = 15;
+			SUBI: opcode_pointer = 18;
+			ADDI: opcode_pointer = 19;
+			MULTQW: opcode_pointer = 20;
+			MULTHW: opcode_pointer = 22;
+			MULTW: opcode_pointer = 27;
+			MULTR: opcode_pointer = 44;
+			RHMULT: opcode_pointer = 45;
+			BREQ: opcode_pointer = 46;
+			BRNEQ: opcode_pointer = 48;
+			BRLT: opcode_pointer = 50;
+			BRLTEQ: opcode_pointer = 52;
+			JUMPREL: opcode_pointer = 54;
+			JUMPR: opcode_pointer = 55;
+			JUMPI: opcode_pointer = 56;
+			CALL: opcode_pointer = 57;
+			RET: opcode_pointer = 59;
+			LRR: opcode_pointer = 61;
+			LRI: opcode_pointer = 62;
+			LSPR: opcode_pointer = 63;
+			LUI: opcode_pointer = 64;
+			LLI: opcode_pointer = 65;
+			SSPR: opcode_pointer = 66;
+			STR: opcode_pointer = 67;
+			STI: opcode_pointer = 68;
+			LREL: opcode_pointer = 69;
+			SREL: opcode_pointer = 70;
+			PUSH: opcode_pointer = 71;
+			POP: opcode_pointer = 73;
+			STQW: opcode_pointer = 75;
+			LDQW: opcode_pointer = 76;
+			STHW: opcode_pointer = 77;
+			LDHW: opcode_pointer = 78;
+			PRG: opcode_pointer = 79;
+			RESPSP: opcode_pointer = 83;
+			SPSP:	opcode_pointer = 84;
+			GPSP:	opcode_pointer = 85;
+			SCOP: opcode_pointer = 86;
+			GCOP: opcode_pointer = 87;
+			EI: opcode_pointer = 88;
+			DI: opcode_pointer = 89;
+			GPTIMER: opcode_pointer = 90;
 			RESET: opcode_pointer = 91;
 			default: opcode_pointer = 0;
 		endcase
@@ -803,7 +877,7 @@ endmodule
 //Outputs: execout, stalldispatch, lt, eq, executec, fucode
 module execute_unit(input logic clk, input logic reset, input logic newmicrocode, input logic[1:0] funcsel, input logic[31:0] ina, input logic[31:0] inb, input logic[6:0] pointer,
 							output logic[31:0] execout, output logic stalldispatch, output logic lt, output logic eq, output logic[4:0] executec, output logic[39:0] fucode);
-	logic[39:0] microcode_line, microcode_line_stable;
+	logic[39:0] microcode_line;
 	logic[31:0] aluout, shiftout, multout;
 	logic shiftdone, shiften, alufunctype, multdone, highlow, accumulate, shiftstalldispatch, multreset;
 	logic[1:0] multmuxas, multmuxbs;
@@ -814,15 +888,14 @@ module execute_unit(input logic clk, input logic reset, input logic newmicrocode
 	
 	always_comb fucode = microcode_line;
 	always_comb linenumber = pointer + {3'b0, executec};
-	always_ff @(negedge clk)
+		
+	always_ff @(negedge clk or posedge reset or posedge newmicrocode)
 		begin
-			if(reset | newmicrocode | microcode_line_stable[30])
+			if(reset | newmicrocode | microcode_line[1])
 				executec <= 0;
-			else
+			else if (~shiftstalldispatch)
 				executec <= executec + 1'b1;
 		end
-	always_ff @(posedge clk)
-		microcode_line_stable <= microcode_line;
 	always_comb
 		case (funcsel)
 			2'b00: begin
@@ -833,21 +906,21 @@ module execute_unit(input logic clk, input logic reset, input logic newmicrocode
 				accumulate = 0;
 				stalldispatch = 0;
 				shiften = 0;
-				alufunc = microcode_line_stable[19:17];
-				alufunctype = microcode_line_stable[20];
+				alufunc = microcode_line[19:17];
+				alufunctype = microcode_line[20];
 				multreset = 0;
 			end
 			2'b01: begin
 				execout = multout;
-				multmuxas = microcode_line_stable[22:21];
-				multmuxbs = microcode_line_stable[24:23];
-				multdemuxs = microcode_line_stable[27:25];
-				accumulate = microcode_line_stable[28];
-				stalldispatch = microcode_line_stable[31];
+				multmuxas = microcode_line[22:21];
+				multmuxbs = microcode_line[24:23];
+				multdemuxs = microcode_line[27:25];
+				accumulate = microcode_line[28];
+				stalldispatch = microcode_line[31];
 				shiften = 0;
 				alufunc = 0;
 				alufunctype = 0;
-				multreset = reset | microcode_line_stable[30];
+				multreset = reset | microcode_line[30];
 			end
 			2'b10: begin
 				execout = shiftout;
@@ -876,25 +949,24 @@ module execute_unit(input logic clk, input logic reset, input logic newmicrocode
 
 	alumod alu(alufunc, alufunctype, ina, inb, aluout, lt, eq);
 	multiplier_unit mult(clk, multreset, ina, inb, multmuxas, multmuxbs, multdemuxs, highlow, accumulate, multout);
-	shifter_unit shifter(clk, reset, shiften, ina, microcode_line_stable[19:17], inb[4:0], shiftstalldispatch, shiftdone, shiftout);
+	shifter_unit shifter(clk, reset, shiften, ina, microcode_line[19:17], inb[4:0], shiftstalldispatch, shiftdone, shiftout);
 endmodule
 
 //Memory access unit
-//Inputs: fromexecute, portb, addrsel, datasel, requestdbus, dbusreqdir, buswait
+//Inputs: clk, reset, fromexecute, portb, addrsel, datasel, requestdbus, dbusreqdir, buswait
 //Outputs: dbusreq, dbusdir, addr, towriteback, stalldispatch 
 //Inout: data
-module mem_access_unit(input logic[31:0] fromexecute, input logic[31:0] portb, input logic addrsel, input logic datasel, input logic requestdbus, input logic dbusreqdir, input logic buswait, output logic dbusreq, output logic dbusdir, output logic[31:0] addr, output logic[31:0] towriteback, output logic stalldispatch, inout logic[31:0] data);
+module mem_access_unit(input logic clk, input logic reset, input logic[31:0] fromexecute, input logic[31:0] portb, input logic addrsel, input logic datasel, input logic requestdbus, input logic dbusreqdir, input logic buswait, input logic memfinished, output logic dbusreq, output logic dbusdir, output logic[31:0] addr, output logic[31:0] towriteback, output logic stalldispatch, inout logic[31:0] data);
 	/* verilator lint_off ALWCOMBORDER */
 	always_comb
 		begin
-			dbusreq = requestdbus;
+			dbusreq = memfinished ? 1'h0 : requestdbus;
 			dbusdir = dbusreqdir;
 			addr = requestdbus ? (addrsel ? portb : fromexecute) : 32'hZ;
-			towriteback = dbusreqdir ? 32'hZ : data;
 			data = dbusreqdir ? (datasel ? portb : fromexecute) : 'hZ;
-		
-			if (requestdbus)
-				stalldispatch = buswait;
+			towriteback = dbusreqdir ? 32'hZ : data;
+			if (requestdbus & ~memfinished)
+				stalldispatch = 1;
 			else
 				stalldispatch = 0;
 		end

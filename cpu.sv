@@ -4,28 +4,31 @@
 
 module processor_core(input logic clk, input logic reset,
 								output logic validaddr, output logic validdata, output logic read, output logic write,
-								inout wire[31:0] adbus);
+								input logic[31:0] adbusi, output logic[31:0] adbuso);
 
-	logic	mode, ucodereset, pspreset, noteq, pccondout, rawpcwe, lt, eq, condpc, internalreset, qfull, memreq, memreqdir, incprefetch, memwait, instreq, pipeready, pcinc, pcdec, spinc, spdec, spwe, pcwe, regwe, pamuxs, stalldispatchexec, stalldispatchmem, addrsel, datasel, requestdbus, dbusreqdir, dbusdir, dbusreq, pamux_ext, pbmux_ext;
+	logic	mode, ucodereset, memfinished, pspreset, noteq, pccondout, rawpcwe, lt, eq, condpc, internalreset, qfull, memreq, memreqdir, incprefetch, memwait, instreq, pipeready, pcinc, pcdec, spinc, spdec, spwe, pcwe, regwe, pamuxs, stalldispatchexec, stalldispatchmem, addrsel, datasel, requestdbus, dbusreqdir, dbusdir, dbusreq, pamux_ext, pbmux_ext, newmicrocode, qempty, incpcfetch;
 	logic[1:0] immsel, pbmuxs, funcsel, wbmuxsel, pccond;
 	logic[3:0] regtowriteo;
 	logic[4:0] executec;
 	logic[6:0] opcode_pointer, opcode_pointero;
 	logic[15:0] immediate;
-	logic[39:0] icodeo;
+	logic[39:0] icodeo, icode;
 	logic[31:0] immediate32, memaddr, programcounter, toprefetch, tofetch, insout, writeback, programstackpointer, supervisorstackpointer, rega, regb, immsignextend, currentsp, outmuxa, outmuxb, ao, bo, execout, memout;
 	wire[31:0] memdata, memdataexec, memdatatemp;
-	
+	logic[31:0] adbus;
+	microcode_rom microcode2({1'b0, opcode_pointer}, icode);
+
+	/* verilator lint_off ALWCOMBORDER */
 	always_comb
 		begin
 			regwe = icodeo[0];
-			pcinc = icodeo[1];
+			pcinc = incpcfetch; //(icodeo[1] & pipeready & incpcfetch);
 			pcdec = icodeo[2];
 			spinc = icodeo[3];
 			spdec = icodeo[4];
 			spwe = icodeo[5];
-			pamuxs = icodeo[6];
-			pbmuxs = icodeo[8:7];
+			pamuxs = icode[6];
+			pbmuxs = icode[8:7];
 			addrsel = icodeo[9];
 			datasel = icodeo[10];
 			requestdbus = icodeo[11];
@@ -38,10 +41,21 @@ module processor_core(input logic clk, input logic reset,
 			ucodereset = icodeo[37];
 			pspreset = icodeo[38];
 			rawpcwe = icodeo[39];
+			newmicrocode = icodeo[30];
 			pcwe = condpc ? pccondout : rawpcwe;
-			internalreset = reset | ucodereset;
+			internalreset = ~reset | ucodereset;
 			noteq = ~eq;
 			pipeready = ~(stalldispatchmem | stalldispatchexec);
+			/* verilator lint_off ALWCOMBORDER */
+			/* verilator lint_off MULTIDRIVEN */
+			if ((validdata) & read)
+				adbus = adbusi;
+			else
+				adbus = 'hZ;
+			if (validaddr | write)
+				adbuso =  adbus;
+			else
+				adbuso = 'hZ;
 	end
 	
 	always_ff @(posedge clk)
@@ -53,16 +67,16 @@ module processor_core(input logic clk, input logic reset,
 	ob4inmux pccondmux(eq, noteq, lt, lt | eq, pccond, pccondout);
 	
 	//Inputs: clk, reset, qfull, memreq, memreqdir, memaddr, programcounter
-	//Outputs: validaddr, validdata, read, write, incprefetch, toprefetch, memwait
+	//Outputs: validaddr, validdata, read, write, incprefetch, toprefetch, memwait, memfinished
 	//Inout: adbus, memdata
 	busunit busconnection(clk, internalreset, qfull, memreq, dbusreqdir, memaddr, programcounter,
-									validaddr, validdata, read, write, incprefetch, toprefetch, memwait,
+									validaddr, validdata, read, write, incprefetch, toprefetch, memwait, incpcfetch, memfinished,
 									adbus, memdata);
 
 	//Inputs: clk, reset, instreq, instadd, insttoadd
 	//Outputs: qfull, tofetch
 	prefetcher prefetch(clk, internalreset, instreq, incprefetch, toprefetch,
-								qfull, tofetch);
+								qempty, qfull, tofetch);
 	
 	//Inputs: clk, reset, ready, insin
 	//Outputs: instreq, instout
@@ -94,18 +108,18 @@ module processor_core(input logic clk, input logic reset,
 	
 	//Inputs: clk, reset, stall, icode[18], a, b, regtowrite
 	//Outputs: icodefunc, afunc, bfunc, regtowritefunc
-	pipebreak pipestage01(clk, internalreset, pipeready, opcode_pointer, outmuxa, outmuxb, insout[11:8],
+	pipebreak pipestage01(clk, internalreset, ~pipeready, opcode_pointer, outmuxa, outmuxb, insout[11:8],
 																opcode_pointero, ao, bo, regtowriteo);
 	
 	//Inputs: clk, reset, funcsel, ina, inb, pointer[6:0]
 //Outputs: execout, stalldispatch, lt, eq, executec, fucode
-	execute_unit exec(clk, internalreset, funcsel, ao, bo, opcode_pointero,
+	execute_unit exec(clk, internalreset, newmicrocode, funcsel, ao, bo, opcode_pointero,
 														execout, stalldispatchexec, lt, eq, executec, icodeo);
 	
-	//Inputs: fromexecute, portb, addrsel, datasel, requestdbus, dbusreqdir, buswait
+	//Inputs: fromexecute, portb, addrsel, datasel, requestdbus, dbusreqdir, buswait, memfinished
 	//Outputs: dbusreq, dbusdir, addr, towriteback, stalldispatch 
 	//Inout: data
-	mem_access_unit memaccess(execout, bo, addrsel, datasel, requestdbus, dbusreqdir, memwait,
+	mem_access_unit memaccess(clk, reset, execout, bo, addrsel, datasel, requestdbus, dbusreqdir, memwait, memfinished,
 																				memreq, memreqdir, memaddr, memout, stalldispatchmem,
 																				memdata);
 	

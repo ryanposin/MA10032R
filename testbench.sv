@@ -21,6 +21,8 @@ module testbench();
 	end
 
 	initial begin
+	$dumpfile("tracefile");
+	$dumpvars();
 	testcount = 0;
 	testfail = 0;
 	reset = 1; #10;
@@ -526,13 +528,20 @@ module testbench();
 	$display("%d tests. %d tests passed. %d tests failed. (ALU tests)\n", testcount + testfail, testcount, testfail);
 	testcount = 0;
 	testfail = 0;
+	
+	pointer = 7'd44;
+	newmicrocode = 1;
+	a = 0;
+	b = 0;
+	#125 newmicrocode = 0;
+	
 	funcsel = 1;
 	a = 211;
 	b = 124;
 	pointer = 7'd20;
 	newmicrocode = 1;
 	#125 newmicrocode = 0;
-	#250;
+	#125;
 	if (execout == a * b)
 		testcount += 1;
 	else
@@ -547,11 +556,10 @@ module testbench();
 	b = 0;
 	#125 newmicrocode = 0;
 	#125;
-	$display("Reset multiplier accumulator: execout = %d", execout);
-	
+		
 	funcsel = 1;
-	a = 500;
-	b = 500;
+	a = 1;
+	b = 1;
 	pointer = 7'd22;
 	newmicrocode = 1;
 	#125 newmicrocode = 0;
@@ -569,16 +577,14 @@ module testbench();
 	a = 0;
 	b = 0;
 	#125 newmicrocode = 0;
-	#125;
-	$display("Reset multiplier accumulator: execout = %d", execout);
-	
+	 
 	funcsel = 1;
-	a = 69000;
-	b = 70000;
+	a = 70000;
+	b = 6000;
 	pointer = 7'd27;
 	newmicrocode = 1;
 	#125 newmicrocode = 0;
-	#5000;
+	#4000
 	if (execout == a * b)
 		testcount += 1;
 	else
@@ -588,6 +594,24 @@ module testbench();
 		end
 
 	$display("%d tests. %d tests passed. %d tests failed. (Multiplier tests)\n", testcount + testfail, testcount, testfail);
+	
+	testcount = 0;
+	testfail = 0;
+	funcsel = 2;
+	a = 1241;
+	b = 16;
+	pointer = 7'd3;
+	newmicrocode = 1;
+	#125 newmicrocode = 0;
+	#2500
+	if (execout == 1241 << 16)
+		testcount += 1;
+	else
+		begin
+			testfail += 1;
+			$display("Failed shift left test:\ninput = %d\nshift amount = %d\nstall dispatch = %b\nresult = %d\n", a, b, stalldispatch, execout);
+		end
+	
 	$finish();
 	end
 
