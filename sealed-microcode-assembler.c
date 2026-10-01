@@ -12,7 +12,7 @@ int main(void) {
     };
     
     struct kw_map keywords[] = {
-        {"REGWE", 1ull << 0, 0},
+        {"REGWE", 1ull, 0},
 	{"PCINC", 1ull << 1, 1},
 	{"PCDEC", 1ull << 2, 2},
 	{"SPINC", 1ull << 3, 3},
@@ -30,25 +30,28 @@ int main(void) {
 	{"MULTMUXAS", 0b11ull << 21, 21},
 	{"MULTMUXBS", 0b11ull << 23, 23},
 	{"MULTDEMUX", 0b111ull << 25, 25},
-	{"MULTACC", 1ull << 28, 28},
-	{"MULTOUT", 1ull << 29, 29},
-	{"MULTRESET", 1ul << 30, 30},
-	{"EXECREADY", 1ull << 31, 31},
-	{"IMM", 1ull << 32, 32},
-	{"CONDPC", 1ull << 34, 34},
-	{"PCCOND", 1ull << 35, 35},
-	{"RESET", 1ull << 37, 37},
-	{"PSPRESET", 1ull << 38, 38},
-	{"PRGMODE", 1ull << 39, 39}
+	{"MULTACC", 0b1ull << 28, 28},
+	{"MULTOUT", 0b1ull << 29, 29},
+	{"MULTRESET", 0b1ul << 30, 30},
+	{"EXECREADY", 0b1ull << 31, 31},
+	{"IMM", 0b1ull << 32, 32},
+	{"CONDPC", 0b1ull << 34, 34},
+	{"PCCOND", 0b11ull << 35, 35},
+	{"RESET", 0b1ull << 37, 37},
+	{"PSPRESET", 0b1ull << 38, 38},
+	{"PCWE", 0b1ull << 39, 39},
+	{"PRGMODE", 0b1ull << 40, 40},
+	{"PPAS", 0b1ull << 41, 41},
+	{"PPBS", 0b1ull << 42, 42},
 	{NULL, 0ull, 0}
     };
 
     FILE *fptr = fopen("microcode.mc", "r");
     char *line = malloc(300);
-    uint8_t integer_val;
+    uint64_t integer_val;
     uint64_t bits_for_this_line;
 	while(fgets(line, 300, fptr)) {
-		bits_for_this_line = 0x80006002UL;
+		bits_for_this_line = 0x0000001280006002ULL;
 		char *saveptr1;
 		char *label = strtok_r(line, ":", &saveptr1);
 	//	printf("label: %s\n", label);
@@ -71,7 +74,8 @@ int main(void) {
 			}
 			tok = strtok_r(NULL, " ", &saveptr1);
 		}
-		printf("bits = %lX\n", bits_for_this_line);
+		printf("%lX\n", bits_for_this_line);
+
 	}
 
     

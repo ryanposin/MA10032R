@@ -18,9 +18,9 @@ module testbench();
 		if(validaddr)
 			addr = adbuso;
 
-	always_ff @(negedge validdata)
-		if (write)
-			ram[addr][31:0] <= adbuso;
+	always_latch
+		if (validdata & write)
+			ram[addr][31:0] = adbuso;
 
 	initial begin
 		$readmemh("ramfile.txt", ram);
