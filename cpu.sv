@@ -4,7 +4,7 @@
 
 module processor_core(input logic clk, input logic reset,
 								output logic validaddr, output logic validdata, output logic read, output logic write,
-								inout wire[31:0] adbus);//input logic[31:0] adbusi, output logic[31:0] adbuso);
+								inout wire[31:0] adbus, input logic[31:0] adbusi, output logic[31:0] adbuso);
 
 	logic	mode, ucodereset, memfinished, pspreset, noteq, pccondout, rawpcwe, lt, eq, condpc, internalreset, qfull, memreq, memreqdir, incprefetch, memwait, instreq, pipeready, pcinc, pcdec, spinc, spdec, spwe, pcwe, regwe, pamuxs, stalldispatchexec, stalldispatchmem, addrsel, datasel, requestdbus, dbusreqdir, dbusdir, dbusreq, pamux_ext, pbmux_ext, newmicrocode, qempty, incpcfetch, breset, feq, fneq, flt, ppas, ppbs;
 	logic[1:0] immsel, pbmuxs, funcsel, wbmuxsel, pccond;
@@ -58,20 +58,20 @@ module processor_core(input logic clk, input logic reset,
 			noteq = ~eq;
 			pipeready = ~(stalldispatchmem | stalldispatchexec);
 			newmicrocode = icodeo[31];
-		/*	if (opcode_pointero >= 46 & opcode_pointero <= 59)
+			/*if (opcode_pointero >= 46 & opcode_pointero <= 59)
 				breset = 1;
 			else
-				breset = 0;
-		*/	/* verilator lint_off ALWCOMBORDER */
+				breset = 0;*/
+			/* verilator lint_off ALWCOMBORDER */
 			/* verilator lint_off MULTIDRIVEN */
-			/*if ((validdata) & read)
+			if ((validdata) & read)
 				adbus = adbusi;
 			else
 				adbus = 'hZ;
 			if (validaddr | write)
 				adbuso =  adbus;
 			else
-				adbuso = 'hZ;*/
+				adbuso = 'hZ;
 	end
 	
 	always_ff @(posedge clk)

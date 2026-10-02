@@ -5,9 +5,10 @@ module testbench();
 	logic[31:0] addr, ram[10];
 	logic[31:0] adbusi, adbuso, adbus;
 
+
 	processor_core ma10032r(clk, reset,
 				validaddr, validdata, read, write,
-				adbusi, adbuso);
+				adbus, adbusi, adbuso);
 	always_comb
 		if (read)
 			adbusi = ram[addr];

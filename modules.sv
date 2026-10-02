@@ -105,164 +105,159 @@ endmodule
 //Shifter unit
 //Inputs: clk, reset, shifttype, shiftamt
 //Outputs: stalldispatch, shiftdone, shiftout
-module shifter_unit(input wire clk, input wire reset, input wire shiften, input wire[31:0] a, input wire[2:0] shifttype, input wire[4:0] shiftamt, output logic stalldispatch, output logic shiftdone, output logic[31:0] shiftout);
-	logic[5:0] shiftstate;
-	logic[31:0] dout;
+module shifter_unit(input wire clk, input wire reset, input wire shiften, input wire[31:0] a, input wire[4:0] shiftamt, input logic shiftdir, input logic signextendsel, input logic rotate, output logic stalldispatchout, output logic shiftdone, output logic[31:0] shiftout);
+localparam WAITING = 0;
+localparam SHIFT1 = 1;
+localparam SHIFT2 = 2;
+localparam SHIFT4 = 3;
+localparam SHIFT8 = 4;
+localparam SHIFT16 = 5;
 
-	localparam WAIT = 0;
-	localparam SH16 = 6'b010000;
-	localparam SH8 = 6'b001000;
-	localparam SH4 = 6'b000100;
-	localparam SH2 = 6'b000010;
-	localparam SH1 = 6'b000001;
-	localparam SDONE = 6'b100000;
-	always_ff @(posedge clk)
-		begin
-			if (reset)
-				begin
-					stalldispatch <= 0;
-					shiftstate <= WAIT;
-				end
+logic[2:0] shiftstate;
+logic signextend, shift1sel, shift2sel, shift4sel, shift8sel, shift16sel, notfirstcycle;
+logic[31:0] amuxout, shift1out, shift2out, shift4out, shift8out, shift16out, shift1unit, shift2unit, shift4unit, shift8unit, shift16unit;
+logic rotate1, shift1rot;
+logic[1:0] rotate2, shift2rot;
+logic[3:0] rotate4, shift4rot;
+logic[7:0] rotate8, shift8rot;
+logic[15:0] rotate16, shift16rot;
 
+always_ff @(posedge clk)
+	begin
+		if (reset)
+			shiftstate <= WAITING;
+		else if (shiften)
 			case (shiftstate)
-				WAIT: if (shiften)
-					begin
-						if (shiftamt[4] == 1'b1)
-							begin
-								shiftstate <= SH16;
-								stalldispatch <= 1;
-							end
-						else if (shiftamt[4:3] == 2'b01)
-							begin
-								shiftstate <= SH8;
-								stalldispatch <= 1;
-							end
-						else if (shiftamt[4:2] == 3'b001)
-							begin
-								shiftstate <= SH4;
-								stalldispatch <= 1;
-							end
-						else if (shiftamt[4:1] == 4'b0001)
-							begin
-								shiftstate <= SH2;
-								stalldispatch <= 1;
-							end
-						else if (shiftamt[4:0] == 5'b00001)
-							begin
-								shiftstate <= SH1;
-								stalldispatch <= 1;
-							end
-						else
-							shiftstate <= SDONE;
-					end
-
-				SH16:	if (shiftamt[3] == 1'b1)
-						shiftstate <= SH8;
-					else if (shiftamt[3:2] == 2'b01)
-						shiftstate <= SH4;
-					else if (shiftamt[3:1] == 3'b001)
-						shiftstate <= SH2;
-					else if (shiftamt[3:0] == 4'b0001)
-						shiftstate <= SH1;
+				WAITING: if (shiftamt[4] == 'b1)
+						shiftstate <= SHIFT16;
+					else if (shiftamt[4:3] == 'b01)
+						shiftstate <= SHIFT8;
+					else if (shiftamt[4:2] == 'b001)
+						shiftstate <= SHIFT4;
+					else if (shiftamt[4:1] == 'b0001)
+						shiftstate <= SHIFT2;
+					else if (shiftamt[4:0] == 'b00001)
+						shiftstate <= SHIFT1;
 					else
-						shiftstate <= SDONE;
-
-				SH8:	if (shiftamt[2] == 1'b1)
-						shiftstate <= SH4;
-					else if (shiftamt[2:1] == 2'b01)
-						shiftstate <= SH2;
-					else if (shiftamt[2:0] == 3'b001)
-						shiftstate <= SH1;
+						shiftstate <= WAITING;
+				SHIFT16: if (shiftamt[3] == 'b1)
+						shiftstate <= SHIFT8;
+					else if (shiftamt[3:2] == 'b01)
+						shiftstate <= SHIFT4;
+					else if (shiftamt[3:1] == 'b001)
+						shiftstate <= SHIFT2;
+					else if (shiftamt[3:0] == 'b0001)
+						shiftstate <= SHIFT1;
 					else
-						shiftstate <= SDONE;
-
-				SH4:	if (shiftamt[1] == 1'b1)
-						shiftstate <= SH2;
-					else if (shiftamt[1:0] == 2'b01)
-						shiftstate <= SH1;
+						shiftstate <= WAITING;
+				SHIFT8: if (shiftamt[2] == 'b1)
+						shiftstate <= SHIFT4;
+					else if (shiftamt[2:1] == 'b01)
+						shiftstate <= SHIFT2;
+					else if (shiftamt[2:0] == 'b001)
+						shiftstate <= SHIFT1;
 					else
-						shiftstate <= SDONE;
-
-				SH2:	if (shiftamt[0])
-						shiftstate <= SH1;
+						shiftstate <= WAITING;
+				SHIFT4: if (shiftamt[1] == 'b1)
+						shiftstate <= SHIFT2;
+					else if (shiftamt[1] == 'b01)
+						shiftstate <= SHIFT1;
 					else
-						shiftstate <= SDONE;
-				SH1: shiftstate <= SDONE;
-				SDONE: begin
-					shiftstate <= WAIT;
-					stalldispatch <= 0;
-				end
+						shiftstate <= WAITING;
+				SHIFT2: if (shiftamt[0] == 'b1)
+						shiftstate <= SHIFT1;
+					else
+						shiftstate <= WAITING;
+				SHIFT1: shiftstate <= WAITING;
 			endcase
-		end
+
+		shiftout <= shift1out | shift2out | shift4out  | shift8out | shift16out;
+
+		if (shiftstate == SHIFT16 | shiftstate == SHIFT8 | shiftstate == SHIFT4 | shiftstate == SHIFT2 | shiftstate == SHIFT1 & ~notfirstcycle )
+			notfirstcycle <= 1;
+		else if (reset | shiftstate == WAITING)
+			notfirstcycle <= 0;
+	end
 
 	always_comb
 		begin
-			if (shiftstate == WAIT)
-				begin
-					shiftout = dout;
-					shiftdone = 0;
-				end
-			if (shiftstate == SDONE)
-				begin
-					shiftdone = 1;
-					shiftout = dout;
-				end
+			if (shiftstate == SHIFT16 | shiftstate == SHIFT8 | shiftstate == SHIFT4 | shiftstate == SHIFT2 | shiftstate == SHIFT1 | ~notfirstcycle)
+				stalldispatchout = 1;
 			else
-				begin
-					shiftdone = 0;
-					shiftout = dout;
+				stalldispatchout = 0;
+
+			case (shiftstate)
+				SHIFT16: begin
+					shift16sel =  1'b1;
+					shift8sel =  1'b0;
+					shift4sel =  1'b0;
+					shift2sel =  1'b0;
+					shift1sel =  1'b0;
 				end
-			end
-		
-		always_ff @(negedge clk)
-			begin
-				if (shiftstate == WAIT)
-					dout <= a;
-				case(shifttype)
-					3'b000:	case (shiftstate) //Shift left w/o carry
-								SH1: dout <= dout << 1;
-								SH2: dout <= dout << 2;
-								SH4: dout <= dout << 4;
-								SH8: dout <= dout << 8;
-								SH16: dout <= dout << 16;
-								default: dout <= 32'b0;
-							endcase
-				
-					3'b001:	case (shiftstate) //Shift right w/o carry
-								SH1: dout <= dout >> 1;
-								SH2: dout <= dout >> 2;
-								SH4: dout <= dout >> 4;
-								SH8: dout <= dout << 8;
-								SH16: dout <= dout >> 16;
-								default: dout <= 32'b0;
-							endcase							
-					3'b010:	case (shiftstate) //Rotate right w/o carry
-								SH1: dout <= {dout[0],dout[31:1]};
-								SH2: dout <= {dout[1:0],dout[31:2]};
-								SH4: dout <= {dout[3:0],dout[31:4]};
-								SH8: dout <= {dout[7:0],dout[31:8]};
-								SH16: dout <= {dout[15:0],dout[31:16]};
-								default: dout <= 32'b0;
-							endcase
-					3'b011:	case (shiftstate) //Rotate left w/o carry
-								SH1: dout <= {dout[30:0],dout[31]};
-								SH2: dout <= {dout[29:0],dout[31:30]};
-								SH4: dout <= {dout[27:0],dout[31:28]};
-								SH8: dout <= {dout[23:0],dout[31:24]};
-								SH16: dout <= {dout[15:0],dout[31:16]};
-								default: dout <= 32'b0;
-							endcase
-					3'b100: case (shiftstate)
-								SH1: dout <= {dout[31], dout[31:1]};
-								SH2: dout <= {{2{dout[31]}}, dout[31:2]};
-								SH4: dout <= {{4{dout[31]}}, dout[31:4]};
-								SH8: dout <= {{8{dout[31]}}, dout[31:8]};
-								SH16: dout <= {{16{dout[31]}}, dout[31:16]};
-								default: dout <= 32'b0;
-							endcase
-					default: dout <= 32'b0;
-				endcase
-			end
+				SHIFT8: begin
+					shift16sel =  1'b0;
+					shift8sel =  1'b1;
+					shift4sel =  1'b0;
+					shift2sel =  1'b0;
+					shift1sel =  1'b0;
+				end
+				SHIFT4: begin
+					shift16sel =  1'b0;
+					shift8sel =  1'b0;
+					shift4sel =  1'b1;
+					shift2sel =  1'b0;
+					shift1sel =  1'b0;
+				end
+				SHIFT2: begin
+					shift16sel =  1'b0;
+					shift8sel =  1'b0;
+					shift4sel =  1'b0;
+					shift2sel =  1'b1;
+					shift1sel =  1'b0;
+				end
+				SHIFT1: begin
+					shift16sel =  1'b0;
+					shift8sel =  1'b0;
+					shift4sel =  1'b0;
+					shift2sel =  1'b0;
+					shift1sel = 1'b1;
+				end
+				default: begin
+					shift16sel =  1'b0;
+					shift8sel =  1'b0;
+					shift4sel =  1'b0;
+					shift2sel =  1'b0;
+					shift1sel = 1'b0;
+				end
+			endcase
+			amuxout = notfirstcycle ? shiftout : a;  
+
+			signextend = signextendsel ? a[31] : 0;
+
+			rotate1 = shiftdir ? amuxout[31] : amuxout[0];
+			rotate2 = shiftdir ? amuxout[31:30] : amuxout[1:0];
+			rotate4 = shiftdir ? amuxout[31:28] : amuxout[3:0];
+			rotate8 = shiftdir ? amuxout[31:24] : amuxout[7:0];
+			rotate16 = shiftdir ? amuxout[31:16] : amuxout[15:0];
+
+			shift1rot = rotate ? rotate1 : signextend;
+			shift2rot = rotate ? rotate2 : {2{signextend}};
+			shift4rot = rotate ? rotate4 : {4{signextend}};
+			shift8rot = rotate ? rotate8 : {8{signextend}};
+			shift16rot = rotate ? rotate16 : {16{signextend}};
+			
+			shift1unit = shiftdir ? {shift1rot, amuxout[31:1]} : {amuxout[30:0], shift1rot}; //right : left
+			shift2unit = shiftdir ? {shift2rot, amuxout[31:2]} : {amuxout[29:0], shift2rot};
+			shift4unit = shiftdir ? {shift4rot, amuxout[31:4]} : {amuxout[27:0], shift4rot};
+			shift8unit = shiftdir ? {shift8rot, amuxout[31:8]} : {amuxout[23:0], shift8rot};
+			shift16unit = shiftdir ? {shift16rot, amuxout[31:16]} : {amuxout[15:0], shift16rot};
+
+			shift1out = shift1sel ? shift1unit : 'h0; 
+			shift2out = shift2sel ? shift2unit : 'h0;
+			shift4out = shift4sel ? shift4unit : 'h0;
+			shift8out = shift8sel ? shift8unit : 'h0;
+			shift16out = shift16sel ? shift16unit : 'h0;
+		end
 endmodule
 
 module multiplier_unit (input wire clk, input wire reset, input wire[31:0] a, input wire[31:0] b, input wire[1:0] muxas, input wire[1:0] muxbs, input wire[2:0] demuxs, input wire highlow, input wire accumulate, output logic[31:0] multout);
@@ -540,20 +535,10 @@ module prefetcher(input logic clk, input logic reset, input logic instreq, input
 				tofetch = 'h0;
 				programcounterinst = 'h0;
 			end
-
-	always_ff @(posedge clk)
-		begin
-			if (reset)
-				begin
-					instqcount <= '{'b111,'b111,'b111,'b111,'b111,'b111};
-					ftrack <= QEMPTY;
-//					tofetch <= 0;
-//					programcounterinst <= 0;
-					instq <= '{0,0,0,0,0,0};
-					pcq <= '{0,0,0,0,0,0};
-				end
-			else
-			 	begin
+	always_ff @(negedge clk)
+		if (reset)
+			ftrack <= QEMPTY;
+		else
 			case (ftrack)
 				QEMPTY:
 					if (instreq & instadd | ~instreq & ~instadd)
@@ -600,6 +585,19 @@ module prefetcher(input logic clk, input logic reset, input logic instreq, input
 					else if (~instadd & instreq)
 						ftrack <= Q5;
 			endcase
+	
+	always_ff @(posedge clk)
+		begin
+			if (reset)
+				begin
+					instqcount <= '{'b111,'b111,'b111,'b111,'b111,'b111};
+//					tofetch <= 0;
+//					programcounterinst <= 0;
+					instq <= '{0,0,0,0,0,0};
+					pcq <= '{0,0,0,0,0,0};
+				end
+			else
+			 	begin
 			
 			if (instreq)
 				begin
@@ -928,7 +926,7 @@ module execute_unit(input logic clk, input logic reset, input logic newmicrocode
 							output logic[31:0] execout, output logic stalldispatch, output logic lt, output logic eq, output logic[4:0] executec, output logic[42:0] fucode);
 	logic[42:0] microcode_line;
 	logic[31:0] aluout, shiftout, multout;
-	logic shiftdone, shiften, alufunctype, highlow, accumulate, shiftstalldispatch, multreset, notcount0;
+	logic shiftdone, shiften, alufunctype, highlow, accumulate, shiftstalldispatch, multreset, notcount0, shiftdir, rotate, signextend;
 	logic[1:0] multmuxas, multmuxbs;
 	logic[2:0] alufunc,multdemuxs;
 	logic[7:0] linenumber;
@@ -964,6 +962,9 @@ module execute_unit(input logic clk, input logic reset, input logic newmicrocode
 				alufunc = microcode_line[19:17];
 				alufunctype = microcode_line[20];
 				multreset = 0;
+				shiftdir = 0;
+				signextend = 0;
+				rotate = 0;
 			end
 			2'b01: begin
 				execout = multout;
@@ -976,8 +977,39 @@ module execute_unit(input logic clk, input logic reset, input logic newmicrocode
 				alufunc = 0;
 				alufunctype = 0;
 				multreset = reset | microcode_line[30];
+				shiftdir = 0;
+				signextend = 0;
+				rotate = 0;
 			end
 			2'b10: begin
+				case (pointer)
+					3: begin //SHL
+						shiftdir = 0;
+						signextend = 0;
+						rotate = 0;
+					end
+					4: begin //SHR
+						shiftdir = 1;
+						signextend = 0;
+						rotate = 0;
+					end
+					5: begin //ASR
+						shiftdir = 1;
+						signextend = 0;
+						rotate = 0;
+					end
+					6: begin //ROTL
+						shiftdir = 0;
+						signextend = 0;
+						rotate = 1;
+					end
+					7: begin //ROTR
+						shiftdir = 1;
+						signextend = 0;
+						rotate = 1;
+					end
+				endcase
+
 				execout = shiftout;
 				multmuxas = 0;
 				multmuxbs = 0;
@@ -1000,12 +1032,15 @@ module execute_unit(input logic clk, input logic reset, input logic newmicrocode
 				alufunc = 0;
 				alufunctype = 0;
 				multreset = 0;
+				shiftdir = 0;
+				signextend = 0;
+				rotate = 0;
 				end
 		endcase
 
 	alumod alu(alufunc, alufunctype, ina, inb, aluout, lt, eq);
 	multiplier_unit mult(clk, multreset, ina, inb, multmuxas, multmuxbs, multdemuxs, highlow, accumulate, multout);
-	shifter_unit shifter(clk, reset, shiften, ina, microcode_line[19:17], inb[4:0], shiftstalldispatch, shiftdone, shiftout);
+	shifter_unit shifter(clk, reset, shiften, ina, inb[4:0],  shiftdir, signextend, rotate, shiftstalldispatch, shiftdone, shiftout);
 endmodule
 
 //Memory access unit
