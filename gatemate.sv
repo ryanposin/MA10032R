@@ -153,45 +153,60 @@ always_comb
 		clkdivider = 0;
 
 always_ff @(posedge clkdivider)
-	dividedclk <= ~dividedclk; 
+	begin
+		dividedclk <= ~dividedclk; 
+		if (reset)
+			begin
+				registers[0] <= 8'b0;
+				registers[1] <= 8'b0;
+			end
+		else
+			if (addr == 0 & write)
+				registers[0] <= data;
+			else if (addr == 1 & write)
+				registers[1] <= data;
+	end
 
 //UART RX State machine
 always_ff @(negedge dividedclk)
 	begin
+
 		if (reset)
 			begin
 				rxstate <= IDLE;
-				registers <= '{0,0,0,0};
 			end
-		case (rxstate)
-			IDLE: if (~rx)
-				rxstate <= DATAIN;
-			DATAIN: if (rxcount <= registers[0][3:0])
-					begin
-						rxcount <= rxcount + 1;
-						registers[2] <= {registers[2][6:0],rx};
-					end
-				else if (rxcount == registers[0][3:0] + 1)
-					begin
-						if (registers[0][4])
-							registers[3][0] <= rx;
-						else if (~registers[0][4] & rx)
-							rxcount <= 0;
-							rxstate <= IDLE;
-					end
-		endcase
-		//TX state machine
-		case (txstate)
-			IDLE: if (write & addr == 1)
-				txstate <= START;
-			START: txstate <= DATA;
-			DATA: if (txcount < registers[0][3:0])
-				txcount <= txcount + 1;
-			else if (txcount == registers[0][3:0])
-					txstate <= STOP;
-			STOP: txstate <= IDLE;
-		endcase
-	end
+		else
+			begin	
+				case (rxstate)
+					IDLE: if (~rx)
+						rxstate <= DATAIN;
+					DATAIN: if (rxcount <= registers[0][3:0])
+							begin
+								rxcount <= rxcount + 1;
+								registers[2] <= {registers[2][6:0],rx};
+							end
+						else if (rxcount == registers[0][3:0] + 1)
+								begin
+							if (registers[0][4])
+									registers[3][0] <= rx;
+									else if (~registers[0][4] & rx)
+								rxcount <= 0;
+									rxstate <= IDLE;
+							end
+				endcase
+					//TX state machine
+				case (txstate)
+					IDLE: if (write & addr == 1)
+							txstate <= START;
+					START: txstate <= DATA;
+					DATA: if (txcount < registers[0][3:0])
+						txcount <= txcount + 1;
+					else if (txcount == registers[0][3:0])
+						txstate <= STOP;
+					STOP: txstate <= IDLE;
+				endcase
+			end
+		end
 
 always_comb
 	begin

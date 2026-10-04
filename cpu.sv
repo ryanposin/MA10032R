@@ -13,7 +13,7 @@ module processor_core(input logic clk, input logic reset, input logic nmi, input
 	logic[4:0] executec;
 	logic[6:0] opcode_pointer, opcode_pointero, injectpointer;
 	logic[15:0] immediate;
-	logic[46:0] icodeo, icode;
+	logic[47:0] icodeo, icode;
 	logic[31:0] immediate32, memaddr, programcounter, toprefetch, tofetch, insout, writeback, programstackpointer, supervisorstackpointer, rega, regb, immsignextend, currentsp, outmuxa, outmuxb, ao, bo, execout, memout, pipea, pipeb, pcchain, programcounterinst, programcountero;
 	wire[31:0] memdata, memdataexec, memdatatemp;
 	logic[31:0] tempimm, aforward, bforward, intaddr;
@@ -24,7 +24,9 @@ module processor_core(input logic clk, input logic reset, input logic nmi, input
 	always_ff @(posedge clk)
 		if (opcode_pointer >= 46 & opcode_pointer <= 60)
 			tempimm <= {{16{insout[31]}},insout[31:20],insout[11:8]};
-
+	always_ff @(posedge clk)
+		if (opcode_pointero == 91 | opcode_pointero == 92)
+			inten <= icodeo[47];
 	/* verilator lint_off ALWCOMBORDER */
 	always_comb
 		begin

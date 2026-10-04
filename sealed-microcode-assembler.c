@@ -45,6 +45,7 @@ int main(void) {
 	{"PPBS", 0b11ull << 42, 42},
 	{"BUSWIDTH", 0b11ull << 44, 44},
 	{"IRQACK", 0b1ull << 46, 46},
+	{"INTERRUPT", 0b1ull << 47, 47},
 	{NULL, 0ull, 0}
     };
 

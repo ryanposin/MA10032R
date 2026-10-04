@@ -760,12 +760,12 @@ endmodule
 //Microcode
 //Inputs: Pointer
 //Outputs: Microcode
-module microcode_rom(input logic[7:0] pointer, output logic[46:0] microcode_line);
+module microcode_rom(input logic[7:0] pointer, output logic[47:0] microcode_line);
 	//(*ramstyle = "M20K"*)
-	logic[46:0] microcode[150:0];
+	logic[47:0] microcode[150:0];
 	initial $readmemh("microcode.txt", microcode);
 	
-	always_comb microcode_line = microcode[pointer][46:0];
+	always_comb microcode_line = microcode[pointer][47:0];
 endmodule
 
 //Decoder
@@ -935,8 +935,8 @@ endmodule
 //Inputs: clk, reset, funcsel, ina, inb, pointer[6:0]
 //Outputs: execout, stalldispatch, lt, eq, executec, fucode
 module execute_unit(input logic clk, input logic reset, input logic newmicrocode, input logic[1:0] funcsel, input logic[31:0] ina, input logic[31:0] inb, input logic[6:0] pointer, input logic memaccess,
-							output logic[31:0] execout, output logic stalldispatch, output logic lt, output logic eq, output logic[4:0] executec, output logic[46:0] fucode);
-	logic[46:0] microcode_line;
+							output logic[31:0] execout, output logic stalldispatch, output logic lt, output logic eq, output logic[4:0] executec, output logic[47:0] fucode);
+	logic[47:0] microcode_line;
 	logic[31:0] aluout, shiftout, multout;
 	logic shiftdone, shiften, alufunctype, highlow, accumulate, shiftstalldispatch, multreset, notcount0, shiftdir, rotate, signextend;
 	logic[1:0] multmuxas, multmuxbs;
