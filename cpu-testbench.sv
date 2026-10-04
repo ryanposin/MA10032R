@@ -1,21 +1,26 @@
 `include "cpu.sv"
 /* verilator lint_off UNOPTFLAT */
 module testbench();
-	logic clk, reset, validaddr, validdata, read, write;
+	logic clk, reset, validaddr, validdata, read, write, nmi, intack;
+	logic[1:0] buswidth;
+	logic[2:0] intin;
 	logic[31:0] addr, ram[10];
 	logic[31:0] adbusi, adbuso, adbus;
 
 
-	processor_core ma10032r(clk, reset,
-				validaddr, validdata, read, write,
-				adbus, adbusi, adbuso);
+	processor_core ma10032r(clk, reset, nmi, intin,
+				validaddr, validdata, read, write, buswidth, intack,
+				adbus);
 	always_comb
-		if (read)
+		if (read & validdata)
 			adbusi = ram[addr];
 		else
 			adbusi = 'hZ;
 
-	always_latch
+	assign adbus = read ? adbusi : 'hZ;
+	assign adbuso = (write | read) ? adbus : 'hZ;
+
+	always_ff @(negedge clk)
 		if(validaddr)
 			addr = adbuso;
 

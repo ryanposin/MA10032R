@@ -760,12 +760,12 @@ endmodule
 //Microcode
 //Inputs: Pointer
 //Outputs: Microcode
-module microcode_rom(input logic[7:0] pointer, output logic[44:0] microcode_line);
+module microcode_rom(input logic[7:0] pointer, output logic[46:0] microcode_line);
 	//(*ramstyle = "M20K"*)
-	logic[44:0] microcode[150:0];
+	logic[46:0] microcode[150:0];
 	initial $readmemh("microcode.txt", microcode);
 	
-	always_comb microcode_line = microcode[pointer][44:0];
+	always_comb microcode_line = microcode[pointer][46:0];
 endmodule
 
 //Decoder
@@ -917,15 +917,15 @@ endmodule
 //Pipeline break
 //Inputs: clk, reset, stall, icode[18], a, b, regtowrite
 //Outputs: icodefunc, afunc, bfunc, regtowritefunc
-module pipebreak(input logic clk, input logic reset, input logic stall, input logic[6:0] icode_pointer, input logic[31:0] a, input logic[31:0] b, input logic[3:0] regtowrite, input logic[31:0] programcounterinst, output logic[6:0] icode_pointero, output logic[31:0] afunc, output logic[31:0] bfunc, output logic[3:0] regtowritefunc, output logic[31:0] programcountero);
+module pipebreak(input logic clk, input logic reset, input logic stall, input logic[6:0] icode_pointer, input logic[31:0] a, input logic[31:0] b, input logic[3:0] regtowrite, input logic[31:0] programcounterinst, input logic[2:0] intin, input logic nmi, output logic[6:0] icode_pointero, output logic[31:0] afunc, output logic[31:0] bfunc, output logic[3:0] regtowritefunc, output logic[31:0] programcountero, output logic[2:0] intout, output logic nmiout);
 	always_ff @(posedge clk)
 		begin
 			if (reset)
-				{afunc, bfunc, regtowritefunc, programcountero} <= {32'b0,32'b0,4'b0, 32'b0};
+				{afunc, bfunc, regtowritefunc, programcountero, intout, nmiout} <= {32'b0,32'b0,4'b0, 32'b0, 3'b0, 1'b0};
 			else
 				if (~stall)
 					begin
-						{afunc, bfunc, regtowritefunc, programcountero} <= {a, b, regtowrite, programcounterinst};
+						{afunc, bfunc, regtowritefunc, programcountero, intout, nmiout} <= {a, b, regtowrite, programcounterinst, intin, nmi};
 						icode_pointero <= icode_pointer;
 					end
 		end
@@ -935,8 +935,8 @@ endmodule
 //Inputs: clk, reset, funcsel, ina, inb, pointer[6:0]
 //Outputs: execout, stalldispatch, lt, eq, executec, fucode
 module execute_unit(input logic clk, input logic reset, input logic newmicrocode, input logic[1:0] funcsel, input logic[31:0] ina, input logic[31:0] inb, input logic[6:0] pointer, input logic memaccess,
-							output logic[31:0] execout, output logic stalldispatch, output logic lt, output logic eq, output logic[4:0] executec, output logic[44:0] fucode);
-	logic[44:0] microcode_line;
+							output logic[31:0] execout, output logic stalldispatch, output logic lt, output logic eq, output logic[4:0] executec, output logic[46:0] fucode);
+	logic[46:0] microcode_line;
 	logic[31:0] aluout, shiftout, multout;
 	logic shiftdone, shiften, alufunctype, highlow, accumulate, shiftstalldispatch, multreset, notcount0, shiftdir, rotate, signextend;
 	logic[1:0] multmuxas, multmuxbs;
@@ -1085,9 +1085,9 @@ module mem_access_unit(input logic clk, input logic reset, input logic[31:0] fro
 		end
 	/* verilator lint_on ALWCOMBORDER */
 endmodule
-/*
-module interruptprivilage(input logic[7:0] currentfunc, input logic[2:0] intin, input logic mode, input logic execnotdone,
-			output logic[31:0] newpc, output logic pcwe, output logic clearpipe, output logic stall);
+
+module interruptprivilage(input logic[7:0] currentfunc, input logic[2:0] intin, input logic nmi, input logic mode, input logic inten,
+			output logic injectinst, output logic[6:0] injectpointer);
 
 	localparam SUP = 8'h0F;
 
@@ -1106,94 +1106,31 @@ module interruptprivilage(input logic[7:0] currentfunc, input logic[2:0] intin, 
 
 	always_comb
 		begin
-			if (mode) //Program mode
-				case (currentfunc)
-					LPSP: begin
-						newpc = 32'hFFFFFF00;
-						pcwe = 1;
-						clearpipe = 1;
-					end
-					RESPSP: begin
-						newpc = 32'hFFFFFF00;
-						pcwe = 1;
-						clearpipe = 1;
-					end
-					SPSP: begin
-						newpc = 32'hFFFFFF00;
-						pcwe = 1;
-						clearpipe = 1;
-					end
-					GPSP: begin
-						newpc = 32'hFFFFFF00;
-						pcwe = 1;
-						clearpipe = 1;
-					end
-					SCOP: begin
-						newpc = 32'hFFFFFF00;
-						pcwe = 1;
-						clearpipe = 1;
-					end
-					GCOP: begin
-						newpc = 32'hFFFFFF00;
-						pcwe = 1;
-						clearpipe = 1;
-					end
-					EI: begin
-						newpc = 32'hFFFFFF00;
-						pcwe = 1;
-						clearpipe = 1;
-					end
-					DI: begin
-						newpc = 32'hFFFFFF00;
-						pcwe = 1;
-						clearpipe = 1;
-					end
-					GPTIMER: begin
-						newpc = 32'hFFFFFF00;
-						pcwe = 1;
-						clearpipe = 1;
-					end
-					RESET: begin
-						newpc = 32'hFFFFFF00;
-						pcwe = 1;
-						clearpipe = 1;
-					end
-					default: begin
-						newpc = 32'h0;
-						pcwe = 0;
-						clearpipe = 0;
-					end
-				endcase
-			else //Supervisor mode
-				if (inten)
-					case (intin)
-						3'b000: begin
-							if (execnotdone)
-								stall = 1;
-								newpc = 32'h0;
-								pcwe = 0;
-								clearpipe = 0;
-							else
-								stall = 0;
-								newpc = 32'h0;
-								pcwe = 0;
-								clearpipe = 0;
-							end
-						3'b001:
-						3'b010:
-						3'b011:
-						3'b100:
-						3'b101:
-						3'b110:
-						3'b111:
-					endcase
-				else
-					begin
-						stall = 1'b0;
-						newpc = 32'b0;
-						pcwe = 1'b0;
-						clearpipe = 1'b0
-					end
+			if (mode & currentfunc <= RESET & currentfunc >= PRG) //Program mode
+				begin
+					injectinst = 1;
+					injectpointer = 105;
+				end
+			else if (~mode & currentfunc <= RESET & currentfunc >= PRG) //Supervisor mode
+				begin
+					injectinst = 0;
+					injectpointer = 0;
+				end
+			else if (inten & |intin[2:0])
+				begin
+					injectinst = 1;
+					injectpointer = 95; 
+				end
+			else if (nmi)
+				begin
+					injectinst = 1;
+					injectpointer = 98;
+				end
+			else
+				begin
+					injectinst = 0;
+					injectpointer = 0;
+				end
 		end
 endmodule
-*/
+

@@ -34,7 +34,7 @@ int main(void) {
 	{"MULTOUT", 0b1ull << 29, 29},
 	{"MULTRESET", 0b1ul << 30, 30},
 	{"EXECREADY", 0b1ull << 31, 31},
-	{"IMM", 0b1ull << 32, 32},
+	{"IMM", 0b11ull << 32, 32},
 	{"CONDPC", 0b1ull << 34, 34},
 	{"PCCOND", 0b11ull << 35, 35},
 	{"RESET", 0b1ull << 37, 37},
@@ -42,17 +42,18 @@ int main(void) {
 	{"PCWE", 0b1ull << 39, 39},
 	{"PRGMODE", 0b1ull << 40, 40},
 	{"PPAS", 0b1ull << 41, 41},
-	{"PPBS", 0b1ull << 42, 42},
-	{"BUSWIDTH", 0b11ull << 43, 43},
+	{"PPBS", 0b11ull << 42, 42},
+	{"BUSWIDTH", 0b11ull << 44, 44},
+	{"IRQACK", 0b1ull << 46, 46},
 	{NULL, 0ull, 0}
     };
 
     FILE *fptr = fopen("microcode.mc", "r");
-    char *line = malloc(300);
+    char *line = malloc(500);
     uint64_t integer_val;
     uint64_t bits_for_this_line;
-	while(fgets(line, 300, fptr)) {
-		bits_for_this_line = 0x100080006002ULL;
+	while(fgets(line, 500, fptr)) {
+		bits_for_this_line = 0x200080006002ULL;
 		char *saveptr1;
 		char *label = strtok_r(line, ":", &saveptr1);
 	//	printf("label: %s\n", label);

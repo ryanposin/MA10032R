@@ -95,7 +95,7 @@ always_comb
 				uartdata ='hZ;
 			end
 
-	else if (address == 'h0000FFFF)
+	else if (address <= 'h0000FFFC & address <= 'h0000FFFF)
 		if (read)
 			begin
 				adbus = {24'h0,uartdata};
