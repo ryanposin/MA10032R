@@ -43,6 +43,7 @@ int main(void) {
 	{"PRGMODE", 0b1ull << 40, 40},
 	{"PPAS", 0b1ull << 41, 41},
 	{"PPBS", 0b1ull << 42, 42},
+	{"BUSWIDTH", 0b11ull << 43, 43},
 	{NULL, 0ull, 0}
     };
 
@@ -51,7 +52,7 @@ int main(void) {
     uint64_t integer_val;
     uint64_t bits_for_this_line;
 	while(fgets(line, 300, fptr)) {
-		bits_for_this_line = 0x0000001280006002ULL;
+		bits_for_this_line = 0x100080006002ULL;
 		char *saveptr1;
 		char *label = strtok_r(line, ":", &saveptr1);
 	//	printf("label: %s\n", label);

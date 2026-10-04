@@ -83,6 +83,7 @@ module alumod (input wire[2:0] s, input wire m, input wire[31:0] a, input wire[3
 						3'b001:	dout = a + b;
 						3'b010: dout = a;
 						3'b011: dout = b;
+						3'b100: dout = a + 1;	
 						default:	dout = 0; 
 					endcase
 				1'b1:
@@ -311,7 +312,7 @@ endmodule
 //Inputs: clk, reset, qfull, memreq, memreqdir, memaddr, programcounter
 //Outputs: validaddr, validdata, read, write, incprefetch, toprefetch, memwait, incpc
 //Inout: adbus, memdata
-module busunit(input logic clk, input logic reset, input logic qfull, input logic memreq, input logic memreqdir, input logic[31:0] memaddr, input logic[31:0] programcounter, output logic validaddr, output logic validdata, output logic read, output logic write, output logic incprefetch, output logic[31:0] toprefetch, output logic memwait, output logic incpc, output logic memfinished, output logic[31:0] pcchain, inout logic[31:0] adbus, inout logic[31:0] memdata);
+module busunit(input logic clk, input logic reset, input logic qfull, input logic memreq, input logic memreqdir, input logic[31:0] memaddr, input logic[31:0] programcounter, input logic[1:0] buswidth, output logic validaddr, output logic validdata, output logic read, output logic write, output logic incprefetch, output logic[31:0] toprefetch, output logic memwait, output logic incpc, output logic memfinished, output logic[31:0] pcchain, inout logic[31:0] adbus, inout logic[31:0] memdata);
 
 	logic[2:0] busstate;
 	logic[31:0] memdatatemp;
@@ -377,7 +378,6 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 			HIGHZ: begin
 				toprefetch = 0;
 				pcchain = 0;
-				memdatatemp = 'hZ;
 				adbus = 'hZ;
 				validaddr = 0;
 				validdata = 0;
@@ -386,11 +386,11 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 				incprefetch = 0;
 				incpc = 0;
 				memfinished = 0;
+				memdata = 'hZ;
 					end
 			OUTPUTPC: begin
 				toprefetch = 0;
 				pcchain = 0;
-				memdatatemp = 'hZ;
 				adbus = programcounter;
 				validaddr = 1;
 				validdata = 0;
@@ -399,11 +399,11 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 				incprefetch = 0;
 				incpc = 0;
 				memfinished = 0;
+				memdata = 'hZ;
 			end
 			LATCHINST: begin
 					toprefetch = adbus;
 					pcchain = programcounter;
-					memdatatemp = 'hZ;
 					adbus = 'hZ;
 					validaddr = 0;
 					validdata = 1;
@@ -412,11 +412,11 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 					incprefetch = 1;
 					incpc = 1;
 					memfinished = 0;
+					memdata = 'hZ;
 				end
 			OUTPUTMEM: begin
 				toprefetch = 0;
 				pcchain = 0;
-				memdatatemp = 'hZ;
 				adbus = memaddr;
 				validaddr = 1;
 				validdata = 0;
@@ -425,12 +425,17 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 				incprefetch = 0;
 				incpc = 0;
 				memfinished = 0;
+				memdata = 'hZ;
 			end
 			OUTPUTDATA: begin
 					toprefetch = 0;
 					pcchain = 0;
-					memdatatemp = 'hZ;
-					adbus = memreqdir ? memdata : 'hZ;
+					case (buswidth)
+						0: adbus = memreqdir ? {24'b0,memdata[7:0]} : 'hZ;
+						1: adbus = memreqdir ? {16'b0,memdata[15:0]} : 'hZ;
+						2: adbus = memreqdir ? memdata : 'hZ;
+						default: adbus = 'hZ;
+					endcase
 					validaddr = 0;
 					validdata = 1;
 					read = 0;
@@ -438,11 +443,11 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 					incprefetch = 0;
 					incpc = 0;
 					memfinished = 1;
+					memdata = 'hZ;
 				end
 			LATCHDATA: begin
 					toprefetch = 0;
 					pcchain = 0;
-					memdatatemp = adbus;
 					adbus = 'hZ;
 					validaddr = 0;
 					validdata = 1;
@@ -451,12 +456,17 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 					incprefetch = 0;
 					incpc = 0;
 					memfinished = 1;
+					case (buswidth)
+						0: memdata = {24'b0,adbus[7:0]};
+						1: memdata = {16'b0,adbus[15:0]};
+						2: memdata = adbus;
+						default: memdata = 32'h0;
+					endcase
 				end
 			default: begin
 				toprefetch = 0;
 				pcchain = 0;
 				adbus = 'hZ;
-				memdatatemp ='hZ;
 				validaddr = 0;
 				validdata = 0;
 				read = 0;
@@ -464,9 +474,11 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 				incprefetch = 0;
 				incpc = 0;
 				memfinished = 0;
+				memdata = 'hZ;
 			end
 			endcase
-	always_comb memdata = memreqdir ? 'hZ : adbus; 
+	//always_comb memdata = memreqdir ? 'hZ : adbus; 
+	
 endmodule
 
 //Prefetch unit
@@ -748,12 +760,12 @@ endmodule
 //Microcode
 //Inputs: Pointer
 //Outputs: Microcode
-module microcode_rom(input logic[7:0] pointer, output logic[42:0] microcode_line);
+module microcode_rom(input logic[7:0] pointer, output logic[44:0] microcode_line);
 	//(*ramstyle = "M20K"*)
-	logic[42:0] microcode[150:0];
+	logic[44:0] microcode[150:0];
 	initial $readmemh("microcode.txt", microcode);
 	
-	always_comb microcode_line = microcode[pointer][42:0];
+	always_comb microcode_line = microcode[pointer][44:0];
 endmodule
 
 //Decoder
@@ -889,15 +901,15 @@ module ma10k_frontend(input logic[31:0] instruction, output logic[15:0] immediat
 			STHW: opcode_pointer = 81;
 			LDHW: opcode_pointer = 82;
 			PRG: opcode_pointer = 83;
-			RESPSP: opcode_pointer = 87;
-			SPSP:	opcode_pointer = 88;
-			GPSP:	opcode_pointer = 89;
-			SCOP: opcode_pointer = 90;
-			GCOP: opcode_pointer = 91;
-			EI: opcode_pointer = 92;
-			DI: opcode_pointer = 93;
-			GPTIMER: opcode_pointer = 94;
-			RESET: opcode_pointer = 95;
+			RESPSP: opcode_pointer = 86;
+			SPSP:	opcode_pointer = 87;
+			GPSP:	opcode_pointer = 88;
+			SCOP: opcode_pointer = 89;
+			GCOP: opcode_pointer = 90;
+			EI: opcode_pointer = 91;
+			DI: opcode_pointer = 92;
+			GPTIMER: opcode_pointer = 93;
+			RESET: opcode_pointer = 94;
 			default: opcode_pointer = 0;
 		endcase
 endmodule
@@ -922,9 +934,9 @@ endmodule
 //Execution unit
 //Inputs: clk, reset, funcsel, ina, inb, pointer[6:0]
 //Outputs: execout, stalldispatch, lt, eq, executec, fucode
-module execute_unit(input logic clk, input logic reset, input logic newmicrocode, input logic[1:0] funcsel, input logic[31:0] ina, input logic[31:0] inb, input logic[6:0] pointer,
-							output logic[31:0] execout, output logic stalldispatch, output logic lt, output logic eq, output logic[4:0] executec, output logic[42:0] fucode);
-	logic[42:0] microcode_line;
+module execute_unit(input logic clk, input logic reset, input logic newmicrocode, input logic[1:0] funcsel, input logic[31:0] ina, input logic[31:0] inb, input logic[6:0] pointer, input logic memaccess,
+							output logic[31:0] execout, output logic stalldispatch, output logic lt, output logic eq, output logic[4:0] executec, output logic[44:0] fucode);
+	logic[44:0] microcode_line;
 	logic[31:0] aluout, shiftout, multout;
 	logic shiftdone, shiften, alufunctype, highlow, accumulate, shiftstalldispatch, multreset, notcount0, shiftdir, rotate, signextend;
 	logic[1:0] multmuxas, multmuxbs;
@@ -940,7 +952,7 @@ module execute_unit(input logic clk, input logic reset, input logic newmicrocode
 		begin
 			if(reset | microcode_line[1])// | newmicrocode | microcode_line[1])
 					executec <= 0;
-			else if (notcount0)
+			else if (notcount0 & ~memaccess)
 				executec <= executec + 1'b1;
 		end
 	always_ff @(negedge clk)// or posedge reset)
@@ -1008,6 +1020,11 @@ module execute_unit(input logic clk, input logic reset, input logic newmicrocode
 						signextend = 0;
 						rotate = 1;
 					end
+					default: begin
+						shiftdir = 0;
+						signextend = 0;
+						rotate = 0;
+					end
 				endcase
 
 				execout = shiftout;
@@ -1068,5 +1085,115 @@ module mem_access_unit(input logic clk, input logic reset, input logic[31:0] fro
 		end
 	/* verilator lint_on ALWCOMBORDER */
 endmodule
+/*
+module interruptprivilage(input logic[7:0] currentfunc, input logic[2:0] intin, input logic mode, input logic execnotdone,
+			output logic[31:0] newpc, output logic pcwe, output logic clearpipe, output logic stall);
+
+	localparam SUP = 8'h0F;
 
 
+	localparam PRG = 8'h70;
+	localparam LPSP = 8'h71;
+	localparam RESPSP = 'h72;
+	localparam SPSP = 8'h73;
+	localparam GPSP = 8'h74;
+	localparam SCOP = 8'h75;
+	localparam GCOP = 8'h76;
+	localparam EI = 8'h77;
+	localparam DI = 8'h78;
+	localparam GPTIMER = 8'h79;
+	localparam RESET = 8'h7A;
+
+	always_comb
+		begin
+			if (mode) //Program mode
+				case (currentfunc)
+					LPSP: begin
+						newpc = 32'hFFFFFF00;
+						pcwe = 1;
+						clearpipe = 1;
+					end
+					RESPSP: begin
+						newpc = 32'hFFFFFF00;
+						pcwe = 1;
+						clearpipe = 1;
+					end
+					SPSP: begin
+						newpc = 32'hFFFFFF00;
+						pcwe = 1;
+						clearpipe = 1;
+					end
+					GPSP: begin
+						newpc = 32'hFFFFFF00;
+						pcwe = 1;
+						clearpipe = 1;
+					end
+					SCOP: begin
+						newpc = 32'hFFFFFF00;
+						pcwe = 1;
+						clearpipe = 1;
+					end
+					GCOP: begin
+						newpc = 32'hFFFFFF00;
+						pcwe = 1;
+						clearpipe = 1;
+					end
+					EI: begin
+						newpc = 32'hFFFFFF00;
+						pcwe = 1;
+						clearpipe = 1;
+					end
+					DI: begin
+						newpc = 32'hFFFFFF00;
+						pcwe = 1;
+						clearpipe = 1;
+					end
+					GPTIMER: begin
+						newpc = 32'hFFFFFF00;
+						pcwe = 1;
+						clearpipe = 1;
+					end
+					RESET: begin
+						newpc = 32'hFFFFFF00;
+						pcwe = 1;
+						clearpipe = 1;
+					end
+					default: begin
+						newpc = 32'h0;
+						pcwe = 0;
+						clearpipe = 0;
+					end
+				endcase
+			else //Supervisor mode
+				if (inten)
+					case (intin)
+						3'b000: begin
+							if (execnotdone)
+								stall = 1;
+								newpc = 32'h0;
+								pcwe = 0;
+								clearpipe = 0;
+							else
+								stall = 0;
+								newpc = 32'h0;
+								pcwe = 0;
+								clearpipe = 0;
+							end
+						3'b001:
+						3'b010:
+						3'b011:
+						3'b100:
+						3'b101:
+						3'b110:
+						3'b111:
+					endcase
+				else
+					begin
+						stall = 1'b0;
+						newpc = 32'b0;
+						pcwe = 1'b0;
+						clearpipe = 1'b0
+					end
+		end
+endmodule
+*/

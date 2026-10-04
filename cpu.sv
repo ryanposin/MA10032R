@@ -1,10 +1,10 @@
 //Inputs: clk, reset
-//Outputs: validaddr, validdata, read, write
+//Outputs: validaddr, validdata, read, write, buswidth[1:0] (0 = 8 bit, 1 = 16 bit, 2 = 32 bit)
 //Bidirectional: adbus[31:0]
 
 module processor_core(input logic clk, input logic reset,
-								output logic validaddr, output logic validdata, output logic read, output logic write,
-								inout wire[31:0] adbus, input logic[31:0] adbusi, output logic[31:0] adbuso);
+								output logic validaddr, output logic validdata, output logic read, output logic write, output logic[1:0] buswidth,
+								inout wire[31:0] adbus);//, input logic[31:0] adbusi, output logic[31:0] adbuso);
 
 	logic	mode, ucodereset, memfinished, pspreset, noteq, pccondout, rawpcwe, lt, eq, condpc, internalreset, qfull, memreq, memreqdir, incprefetch, memwait, instreq, pipeready, pcinc, pcdec, spinc, spdec, spwe, pcwe, regwe, pamuxs, stalldispatchexec, stalldispatchmem, addrsel, datasel, requestdbus, dbusreqdir, dbusdir, dbusreq, pamux_ext, pbmux_ext, newmicrocode, qempty, incpcfetch, breset, feq, fneq, flt, ppas, ppbs;
 	logic[1:0] immsel, pbmuxs, funcsel, wbmuxsel, pccond;
@@ -12,10 +12,10 @@ module processor_core(input logic clk, input logic reset,
 	logic[4:0] executec;
 	logic[6:0] opcode_pointer, opcode_pointero;
 	logic[15:0] immediate;
-	logic[42:0] icodeo, icode;
+	logic[44:0] icodeo, icode;
 	logic[31:0] immediate32, memaddr, programcounter, toprefetch, tofetch, insout, writeback, programstackpointer, supervisorstackpointer, rega, regb, immsignextend, currentsp, outmuxa, outmuxb, ao, bo, execout, memout, pipea, pipeb, pcchain, programcounterinst, programcountero;
 	wire[31:0] memdata, memdataexec, memdatatemp;
-	logic[31:0] tempimm;
+	logic[31:0] tempimm, aforward, bforward;
 	microcode_rom microcode2({1'b0, opcode_pointer}, icode);
 	
 	always_ff @(posedge clk)
@@ -53,25 +53,28 @@ module processor_core(input logic clk, input logic reset,
 			rawpcwe = icodeo[39];
 			ppas = icodeo[41];
 			ppbs = icodeo[42];
+			buswidth = icodeo[44:43];
 			pcwe = condpc ? pccondout : rawpcwe;
 			internalreset = ~reset | ucodereset;
 			noteq = ~eq;
 			pipeready = ~(stalldispatchmem | stalldispatchexec);
 			newmicrocode = icodeo[31];
+			
+
 			/*if (opcode_pointero >= 46 & opcode_pointero <= 59)
 				breset = 1;
 			else
 				breset = 0;*/
 			/* verilator lint_off ALWCOMBORDER */
 			/* verilator lint_off MULTIDRIVEN */
-			if ((validdata) & read)
+			/*if ((validdata) & read)
 				adbus = adbusi;
 			else
 				adbus = 'hZ;
 			if (validaddr | write)
 				adbuso =  adbus;
 			else
-				adbuso = 'hZ;
+				adbuso = 'hZ;*/
 	end
 	
 	always_ff @(posedge clk)
@@ -85,7 +88,7 @@ module processor_core(input logic clk, input logic reset,
 	//Inputs: clk, reset, qfull, memreq, memreqdir, memaddr, programcounter
 	//Outputs: validaddr, validdata, read, write, incprefetch, toprefetch, memwait, memfinished
 	//Inout: adbus, memdata
-	busunit busconnection(clk, internalreset | pcwe, qfull, memreq, dbusreqdir, memaddr, programcounter,
+	busunit busconnection(clk, internalreset | pcwe, qfull, memreq, dbusreqdir, memaddr, programcounter, buswidth,
 									validaddr, validdata, read, write, incprefetch, toprefetch, memwait, incpcfetch, memfinished, pcchain,
 									adbus, memdata);
 
@@ -117,20 +120,43 @@ module processor_core(input logic clk, input logic reset,
 	regfile registers(clk, internalreset, insout[7:4], insout[3:0], regtowriteo, regwe, writeback,
 							rega, regb);
 	
-	
+	//Port A and Port B muxes	
 	ttb4inmux immmux({16'b0,immediate},{immediate,16'b0}, {{16{immediate[15]}},immediate[15:0]}, 0, immsel, immediate32);
 	ttb2inmux pamux(rega, programcounter, pamuxs, outmuxa);
 	ttb4inmux pbmux(regb, immediate32, currentsp, programcounter, pbmuxs, outmuxb);
-	
+
+
+	//Pipeline forwarding
+	always_comb
+		if (insout[3:0] == regtowriteto)
+			begin
+				aforward = writeback;
+				bforward = outbuxb;
+			end
+		else if (insout[7:4] == regtowriteto)
+			begin
+				aforward = outmuxa;
+				bforward = writeback;
+			end
+		else
+			begin
+				aforward = outmuxa;
+				bforward = outmuxb;
+			end
+
 	//Inputs: clk, reset, stall, icode[18], a, b, regtowrite
 	//Outputs: icodefunc, afunc, bfunc, regtowritefunc
-	pipebreak pipestage01(clk, internalreset, ~pipeready | pcwe, opcode_pointer, outmuxa, outmuxb, insout[11:8], programcounterinst,
+	pipebreak pipestage01(clk, internalreset, ~pipeready | pcwe, opcode_pointer, aforward, bforward, insout[11:8], programcounterinst,
 															opcode_pointero, ao, bo, regtowriteo, programcountero);
+	
+	//Grab PC or port A
 	ttb2inmux postpipea(ao, programcountero, ppas, pipea);
+	//Grab port B or latched immediate
+	
 	ttb2inmux postpipeb(bo, tempimm, ppbs, pipeb);
 	//Inputs: clk, reset, funcsel, ina, inb, pointer[6:0]
 //Outputs: execout, stalldispatch, lt, eq, executec, fucode
-	execute_unit exec(clk, internalreset, newmicrocode, funcsel, pipea, pipeb, opcode_pointero,
+	execute_unit exec(clk, internalreset, newmicrocode, funcsel, pipea, pipeb, opcode_pointero, memwait,
 														execout, stalldispatchexec, lt, eq, executec, icodeo);
 	
 	//Inputs: fromexecute, portb, addrsel, datasel, requestdbus, dbusreqdir, buswait, memfinished
@@ -140,7 +166,7 @@ module processor_core(input logic clk, input logic reset,
 																				memreq, memreqdir, memaddr, memout, stalldispatchmem,
 																				memdata);
 	
-	//Inputs
+	//Writeback multiplexer
 	ttb4inmux wbmux(execout, memout, bo, 0, wbmuxsel, writeback);
 								
 endmodule
