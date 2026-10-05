@@ -457,10 +457,9 @@ module busunit(input logic clk, input logic reset, input logic qfull, input logi
 					incpc = 0;
 					memfinished = 1;
 					case (buswidth)
-						0: memdata = {24'b0,adbus[7:0]};
-						1: memdata = {16'b0,adbus[15:0]};
-						2: memdata = adbus;
-						default: memdata = 32'h0;
+						0: memdata = memreqdir ? 'hZ : {24'b0,adbus[7:0]};
+						1: memdata = memreqdir ? 'hZ : {16'b0,adbus[15:0]};
+						default: memdata = memreqdir ? 'hZ : adbus;
 					endcase
 				end
 			default: begin
@@ -760,12 +759,12 @@ endmodule
 //Microcode
 //Inputs: Pointer
 //Outputs: Microcode
-module microcode_rom(input logic[7:0] pointer, output logic[47:0] microcode_line);
+module microcode_rom(input logic[7:0] pointer, output logic[48:0] microcode_line);
 	//(*ramstyle = "M20K"*)
-	logic[47:0] microcode[150:0];
+	logic[48:0] microcode[150:0];
 	initial $readmemh("microcode.txt", microcode);
 	
-	always_comb microcode_line = microcode[pointer][47:0];
+	always_comb microcode_line = microcode[pointer][48:0];
 endmodule
 
 //Decoder
@@ -935,8 +934,8 @@ endmodule
 //Inputs: clk, reset, funcsel, ina, inb, pointer[6:0]
 //Outputs: execout, stalldispatch, lt, eq, executec, fucode
 module execute_unit(input logic clk, input logic reset, input logic newmicrocode, input logic[1:0] funcsel, input logic[31:0] ina, input logic[31:0] inb, input logic[6:0] pointer, input logic memaccess,
-							output logic[31:0] execout, output logic stalldispatch, output logic lt, output logic eq, output logic[4:0] executec, output logic[47:0] fucode);
-	logic[47:0] microcode_line;
+							output logic[31:0] execout, output logic stalldispatch, output logic lt, output logic eq, output logic[4:0] executec, output logic[48:0] fucode);
+	logic[48:0] microcode_line;
 	logic[31:0] aluout, shiftout, multout;
 	logic shiftdone, shiften, alufunctype, highlow, accumulate, shiftstalldispatch, multreset, notcount0, shiftdir, rotate, signextend;
 	logic[1:0] multmuxas, multmuxbs;
@@ -969,10 +968,10 @@ module execute_unit(input logic clk, input logic reset, input logic newmicrocode
 				multmuxbs = 0;
 				multdemuxs = 0;
 				accumulate = 0;
-				stalldispatch = ~microcode_line[31];
+				stalldispatch = ~microcode_line[32];
 				shiften = 0;
-				alufunc = microcode_line[19:17];
-				alufunctype = microcode_line[20];
+				alufunc = microcode_line[20:18];
+				alufunctype = microcode_line[21];
 				multreset = 0;
 				shiftdir = 0;
 				signextend = 0;
@@ -980,15 +979,15 @@ module execute_unit(input logic clk, input logic reset, input logic newmicrocode
 			end
 			2'b01: begin
 				execout = multout;
-				multmuxas = microcode_line[22:21];
-				multmuxbs = microcode_line[24:23];
-				multdemuxs = microcode_line[27:25];
-				accumulate = microcode_line[28];
-				stalldispatch = ~microcode_line[31];
+				multmuxas = microcode_line[23:22];
+				multmuxbs = microcode_line[25:24];
+				multdemuxs = microcode_line[28:26];
+				accumulate = microcode_line[29];
+				stalldispatch = ~microcode_line[32];
 				shiften = 0;
 				alufunc = 0;
 				alufunctype = 0;
-				multreset = reset | microcode_line[30];
+				multreset = reset | microcode_line[31];
 				shiftdir = 0;
 				signextend = 0;
 				rotate = 0;
