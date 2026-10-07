@@ -17,8 +17,8 @@
 	xnor r{destreg},r{rega},r{regb} => 0x000_0E @ destreg`4 @ rega`4 @ regb`4
 	sup => 0x000_0F_0_0_0
 
-	subi r{destreg},r{rega},{immh}{imml} => immh`12 @ 0x80 @ destreg`4 @ rega`4 @ imml`4
-	addi r{destreg},r{rega},{immh}{imml} => immh`12 @ 0x80 @ destreg`4 @ rega`4 @ imml`4
+	subi r{destreg},r{rega},{imm: u16} => imm[15:4] @ 0x80 @ destreg`4 @ rega`4 @ imm[3:0]
+	addi r{destreg},r{rega},{imm: u16} => imm[15:4] @ 0x80 @ destreg`4 @ rega`4 @ imm[3:0]
 
 	multqw r{destreg},r{rega},r{regb} => 0x000 @ 0x10 @ destreg`4 @ rega`4 @ regb`4
 	multhw r{destreg},r{rega},r{regb} => 0x000 @ 0x11 @ destreg`4 @ rega`4 @ regb`4
@@ -26,30 +26,32 @@
 	multr => 0x000 @ 0x13 @ 0x000
 	rhmult r{destreg} => 0x000 @ 0x14 @ destreg`4 @ 0x00
 
-	breq {locationh}{locationl},r{rega},r{regb} => locationh`12 @ 0x20 @ locationl`4 @ rega`4 @ regb`4 
-	brneq {locationh}{locationl},r{rega},r{regb} => locationh`12 @ 0x21 @ locationl`4 @ rega`4 @ regb`4 
-	brlt {locationh}{locationl},r{rega},r{regb} => locationh`12 @ 0x22 @ locationl`4 @ rega`4 @ regb`4 
-	brlteq {locationh}{locationl},r{rega},r{regb} => locationh`12 @ 0x23 @ locationl`4 @ rega`4 @ regb`4
+	breq {location: i16},r{rega},r{regb} => location[15:4] @ 0x20 @ location[3:0] @ rega`4 @ regb`4 
+	breqm1 r{rega},r{regb} => 0xFFF @ 0x20 @ 0xF @ rega`4 @ regb`4
+	brneq {location: i16},r{rega},r{regb} => location[15:4] @ 0x21 @ location[3:0] @ rega`4 @ regb`4 
+	brlt {location: i16},r{rega},r{regb} => location[15:4] @ 0x22 @ location[3:0] @ rega`4 @ regb`4 
+	brlteq {location: i16},r{rega},r{regb} => location[15:4] @ 0x23 @ location[3:0] @ rega`4 @ regb`4
 
-	jumprel {locationh}{locationl} => locationh`12 @ 0x24 @ locationl`4 @ 0x00
+	jumprel {location: i16} => location[15:4] @ 0x24 @ location[3:0] @ 0x00
 	jumpr r{rega} => 0x000 @ 0x26 @ 0x0 @ rega @ 0x0
-	jumpi {locationh}{locationl} => locationh`12 @ 0x27 @ locationl`4 @ 0x00
-	call {locationh}{locationl} => locationh`12 @ 0x28 @ locationl`4 @ 0x00
+	jumpi {location: u16} => location[15:4] @ 0x27 @ location[3:0] @ 0x00
+	JUMPI14 => 1`12 @ 0x27 @ 4`4 @ 0x00
+	call {location: s16} => location[15:4] @ 0x28 @ location[3:0] @ 0x00
 	ret => 0x00029000
 	lrr r{destreg},r{rega} => 0x00030 @ {destreg}`4 @ {rega}`4 @ 0x0
-	lri r{destreg},{immh}{imml} => immh`12 @ 0x31 @ {destreg}`4 @ 0x0 @ {imml}`4
+	lri r{destreg},{imm: u16} => imm[15:4] @ 0x31 @ {destreg}`4 @ 0x0 @ imm[3:0]
 	lspr r{rega} => 0x00032 @ 0x0 @ {rega}`4 @ 0x0
-	lui r{destreg},{immh}{imml} => {immh}`12 @ 0x33 @ {destreg}`4 @ 0x0 @ imml`4
-	lli r{destreg},{immh}{imml} => {immh}`12 @ 0x34 @ {destreg}`4 @ 0x0 @ imml`4
+	lui r{destreg},{imm: u16} => imm[15:4] @ 0x33 @ {destreg}`4 @ 0x0 @ imm[3:0]
+	lli r{destreg},{imm: u16} => imm[15:4] @ 0x34 @ destreg`4 @ 0x0 @ imm[3:0]
 	sspr r{destreg} => 0x00035 @ destreg`4 @ 0x00
 	str r{locationreg},r{regtostore} => 0x000360 @ {regtostore}`4 @ locationreg`4
-	sti {locationh}{locationl},r{regtostore} => locationh`12 @ 0x37 @ 0x0 @ regtostore`4 @ locationl`4
-	lrel r{destreg},{immh}{imml} => immh`12 @ 0x38 @ destreg`4 @ 0x0 @ imml`4
-	srel {immh}{imml},r{rega} => immh`12 @ 0x38 @ 0x0 @ rega`4 @ imml`4
+	sti {location: u16},r{regtostore} => location[15:4] @ 0x37 @ 0x0 @ regtostore`4 @ location[3:0]
+	lrel r{destreg},{imm: u16} => imm[15:4] @ 0x38 @ destreg`4 @ 0x0 @ imm[3:0]
+	srel {imm: u16},r{rega} => imm[15:4] @ 0x38 @ 0x0 @ rega`4 @ imm[3:0]
 	push r{rega} => 0x0003A @ 0x0 @ rega`4 @ 0x0
 	pop r{destreg} => 0x0003B @ destreg`4 @ 0x00
-	stqw r{rega} => 0x0003C @ 0x0 @ rega`4 @ 0x0
-	ldqw r{destreg} => 0x0003D @ destreg`4 @ 0x00
+	stqw r{rega},r{datareg} => 0x0003C @ 0x0 @ datareg`4 @ rega`4
+	ldqw r{rega},r{destreg} => 0x0003D @ destreg`4 @ 0x0 @ rega`4
 	sthw r{rega} => 0x0003E @ 0x0 @ rega`4 @ 0x0
 	ldhw r{destreg} => 0x0003F @ destreg`4 @ 0x00
 

@@ -1,0 +1,14 @@
+#include "customasm_ma10k.rules"
+#align 32
+	LLI R1,0x000F
+	LLI R2,0xFFFC
+	LLI R1,0x0007
+	STQW R2,R1
+	ADDI R2,R2,0x0002
+loop:
+	LDQW R3,R2
+	ADDI R4,R2,0x0001
+	BREQM1 R0,R2
+	STQW R4,R2
+	JUMPI14
+

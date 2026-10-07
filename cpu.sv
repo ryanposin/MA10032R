@@ -6,7 +6,7 @@ module processor_core(input logic clk, input logic reset, input logic nmi, input
 								output logic validaddr, output logic validdata, output logic read, output logic write, output logic[1:0] buswidth, output logic intack,
 								inout wire[31:0] adbus);//, input logic[31:0] adbusi, output logic[31:0] adbuso);
 
-	logic	mode, ucodereset, memfinished, pspreset, noteq, pccondout, rawpcwe, lt, eq, condpc, internalreset, qfull, memreq, memreqdir, incprefetch, memwait, instreq, pipeready, pcinc, pcdec, spinc, spdec, spwe, pcwe, regwe, stalldispatchexec, stalldispatchmem, addrsel, datasel, requestdbus, dbusreqdir, dbusdir, dbusreq, pamux_ext, pbmux_ext, newmicrocode, qempty, incpcfetch, breset, feq, fneq, flt, ppas, injectinst, nmilatched, inten;
+	logic	mode, ucodereset, memfinished, pspreset, noteq, pccondout, rawpcwe, lt, eq, condpc, internalreset, qfull, memreq, memreqdir, incprefetch, memwait, instreq, pipeready, pcinc, pcdec, spinc, spdec, spwe, pcwe, regwe, stalldispatchexec, stalldispatchmem, addrsel, datasel, requestdbus, dbusreqdir, dbusdir, dbusreq, pamux_ext, pbmux_ext, newmicrocode, qempty, incpcfetch, breset, feq, fneq, flt, ppas, injectinst, nmilatched, inten, sspwe, pspwe;
 	logic[1:0] immsel, pbmuxs, funcsel, wbmuxsel, pccond, ppbs, pamuxs;
 	logic[2:0] intlatched;
 	logic[3:0] regtowriteo;
@@ -40,6 +40,8 @@ module processor_core(input logic clk, input logic reset, input logic nmi, input
 			spinc = icodeo[3];
 			spdec = icodeo[4];
 			spwe = icodeo[5];
+			pspwe = mode ?  icodeo[5] : 1'b0;
+			sspwe = mode ? 1'b0 : spwe;
 			pamuxs = icode[7:6];
 			pbmuxs = icode[9:8];
 			addrsel = icodeo[10];
@@ -109,8 +111,8 @@ module processor_core(input logic clk, input logic reset, input logic nmi, input
 	//Input: clk, reset, increment, decrement, write enable, d
 	//Output: q
 	ma10k_special_reg pc(clk, internalreset, pcinc, pcdec, pcwe, writeback, programcounter);
-	ma10k_special_reg psp(clk, internalreset | pspreset, spinc, spdec, spwe, writeback, programstackpointer);
-	ma10k_special_reg ssp(clk, internalreset, spinc, spdec, spwe, writeback, supervisorstackpointer);
+	ma10k_special_reg psp(clk, internalreset | pspreset, spinc, spdec, pspwe, writeback, programstackpointer);
+	ma10k_special_reg ssp(clk, internalreset, spinc, spdec, sspwe, writeback, supervisorstackpointer);
 	
 	always_comb currentsp = mode ? programstackpointer : supervisorstackpointer;
 	

@@ -1,69 +1,40 @@
 
-module cpu_wrapper (input logic clk, input logic reset, input logic rx, output logic tx);
-logic uartclkref,uartclk,mclkref,mclk,mclk3;
-logic[1:0] clkstate;
-logic[7:0] uartdata;
-CC_PLL #(
-	.REF_CLK(10.0),
-	.OUT_CLK(2.4576),
-	.LOW_JITTER(1),
-	.LOCK_REQ(1),
-	.CLK270_DOUB(0),
-	.CLK180_DOUB(0),
-	) pll_uart (
-	.CLK_REF(clk),
-	.CLK_FEEDBACK(uartclkref),
-	.USR_LOCKED_STDY_RST(reset),
-	.CLK0(uartclk),
-	.CLK_REF_OUT(uartclkref)
-	);
-CC_PLL #(
-	.REF_CLK(10.0),
-	.OUT_CLK(28.63636),
-	.LOW_JITTER(1),
-	.LOCK_REQ(1),
-	.CLK270_DOUB(0),
-	.CLK180_DOUB(0),
-	) pll_mclk (
-	.CLK_REF(clk),
-	.CLK_FEEDBACK(mclkref),
-	.USR_LOCKED_STDY_RST(reset),
-	.CLK0(mclk),
-	.CLK_REF_OUT(mclkref)
-	);
+module cpu_wrapper (input logic mclk, input logic reset, input logic rx, output logic tx);
 
-logic[31:0] adbus, address;
+logic cpuclk, uartclk,c2,locked;
+
+pll clkpll(
+	reset,
+	mclk,
+	cpuclk,
+	uartclk,
+	c2,
+	locked);
+
+logic[1:0] clkstate;
+wire[7:0] uartdata;
+
+logic[31:0] adbus, address, adbusi;
 logic read, write, validaddr, validdata, uartcs;
 logic[1:0] buswidth;
 
 logic[31:0] ram[32767:0];
-logic[31:0] rom[8191:0];
-
-initial begin
-	$readmemh("rom.hex",rom);
-	end
-
-always_ff @(posedge mclk)
-	case (clkstate)
-		0: clkstate <= 1;
-		1: clkstate <= 2;
-		0: clkstate <= 0;
-	endcase
-
-always_comb
-	if (clkstate == 0)
-		mclk3 = 1;
-	else
-		mclk3 = 0;
+(* ram_init_file = "echo.mif" *) logic[31:0] rom[8191:0];
 
 //System
-processor_core ma10k(mclk3, reset,
+processor_core ma10k(cpuclk, ~reset,
 			validaddr, validdata, read, write, buswidth,
 			adbus);
 
 uartmod uart(uartclk, reset, address[1:0], write, read, uartcs, rx, 
 		tx,
 		uartdata);
+
+always_comb 
+	if (read & validdata & ~write)
+		adbus =  adbusi;
+	else
+		adbus = 'hz;
 
 //Address demux
 always_ff @(negedge validaddr)
@@ -72,55 +43,55 @@ always_ff @(negedge validaddr)
 //Decoding logic
 always_comb
 	if (address < 'h8000)
-		if(read & validdata)
+		if(read & validdata & ~write)
 			begin
-				adbus = rom[address[31:2]];
+				adbusi = rom[address[31:2]];
 				uartdata = 'hZ;
 			end
 		else
 			begin
-				adbus = 'hZ;
+				adbusi = 'hZ;
 				uartdata = 'hZ;
 			end
 	
 	else if (address >= 'hFFFE0000)
-		if (read & validdata)
+		if (read & validdata & ~write)
 			begin
-				adbus = ram[address[31:2]];
+				adbusi = ram[address[31:2]];
 				uartdata = 'hZ;
 			end
 		else
 			begin
-				adbus = 'hZ;
+				adbusi = 'hZ;
 				uartdata ='hZ;
 			end
 
 	else if (address <= 'h0000FFFC & address <= 'h0000FFFF)
-		if (read)
+		if (read & validdata & ~write)
 			begin
-				adbus = {24'h0,uartdata};
+				adbusi = {24'h0,uartdata};
 				uartdata = 'hZ;
 			end
-		else if (write)
+		else if (write & validdata & ~read)
 			begin
-				adbus = 'hZ;
+				adbusi = 'hZ;
 				uartdata = adbus[7:0];
 			end
 		else
 			begin
 				uartdata = 'hZ;
-				adbus = 'hZ;
+				adbusi = 'hZ;
 			end
 	else
 		begin
 			uartdata = 'hZ;
-			adbus = 'hZ;
+			adbusi = 'hZ;
 		end
 
 always_ff @(negedge write)
 	if (validdata)
 		if (address >= 'hFFFE0000)
-			ram[address[31:2]] <= adbus;
+			ram[address[31:2]] <= adbusi;
 
 endmodule
 
@@ -128,7 +99,7 @@ module uartmod(input logic clk, input logic reset, input logic[1:0] addr, input 
 		output logic tx,
 		inout logic[7:0] data);
 logic dividedclk, clkdivider;
-logic[7:0] clkcounter, registers[3:0];
+logic[7:0] clkcounter, registers[4:0];
 logic rxstate;
 logic[1:0] txstate;
 logic[3:0] rxcount, txcount;
@@ -142,10 +113,23 @@ localparam STOP = 3;
 
 //Clock generation
 always_ff @(posedge clk)
-	if (reset)
-		clkcounter <= 0;
+	if (~reset)
+		begin
+			clkcounter <= 0;
+			registers[0] <= 8'b0;
+			registers[1] <= 8'b0;
+			registers[4] <= 8'b0;
+		end
 	else
-		clkcounter <= clkcounter + 1;
+		begin
+			clkcounter <= clkcounter + 1;
+			if (addr == 0 & write)
+				registers[0] <= data;
+			else if (addr == 1 & write)
+				registers[1] <= data;
+			else if (addr == 4 & write)
+				registers[4] <= data;
+		end
 always_comb
 	if (dividedclk == registers[1])
 		clkdivider = 1;
@@ -155,25 +139,18 @@ always_comb
 always_ff @(posedge clkdivider)
 	begin
 		dividedclk <= ~dividedclk; 
-		if (reset)
-			begin
-				registers[0] <= 8'b0;
-				registers[1] <= 8'b0;
-			end
-		else
-			if (addr == 0 & write)
-				registers[0] <= data;
-			else if (addr == 1 & write)
-				registers[1] <= data;
 	end
 
 //UART RX State machine
 always_ff @(negedge dividedclk)
 	begin
 
-		if (reset)
+		if (~reset)
 			begin
 				rxstate <= IDLE;
+				registers[2] <= 8'b0;
+				registers[3] <= 8'b0;
+
 			end
 		else
 			begin	
@@ -213,7 +190,7 @@ always_comb
 		case(txstate)
 			IDLE: tx = 1;
 			START: tx = 0;
-			DATA: tx = registers[1][txcount];
+			DATA: tx = registers[4][txcount];
 			STOP: tx = 1;
 			default: tx = 1;
 		endcase
