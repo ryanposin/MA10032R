@@ -3,17 +3,17 @@
 //Input: clk, reset, increment, decrement, write enable, d
 //Output: q
 module ma10k_special_reg (input wire clk, input wire reset, input wire inc, input wire dec, input wire we, input logic[31:0] d, output logic[31:0] q);
-	always_ff @(negedge clk)//, posedge we)
+	always_ff @(posedge clk or posedge we)
 		begin
 			if (reset)
 				q <= 0;
 			else
 				if (we)
-				q <= d;
+				    q <= d;
 				else if (dec)
-				q <= q - 1;
+				    q <= q - 4;
 				else if (inc)
-					q <= q + 1;
+					q <= q + 4;
 				else if (inc & dec)
 					q <= q;
 			
@@ -83,7 +83,8 @@ module alumod (input wire[2:0] s, input wire m, input wire[31:0] a, input wire[3
 						3'b001:	dout = a + b;
 						3'b010: dout = a;
 						3'b011: dout = b;
-						3'b100: dout = a + 1;	
+						3'b100: dout = a + 4;
+						3'b101: dout = b + 4;
 						default:	dout = 0; 
 					endcase
 				1'b1:
@@ -265,7 +266,7 @@ module multiplier_unit (input wire clk, input wire reset, input wire[31:0] a, in
 	
 	logic[7:0] multina;
 	logic[7:0] multinb;
-	logic[15:0] multtempout;
+	(* use_dsp = "yes" *) logic[15:0] multtempout;
 	logic[63:0] demux;
 	logic[63:0] productreg;
 	logic carry;
@@ -312,408 +313,408 @@ endmodule
 //Inputs: clk, reset, qfull, memreq, memreqdir, memaddr, programcounter
 //Outputs: validaddr, validdata, read, write, incprefetch, toprefetch, memwait, incpc
 //Inout: adbus, memdata
-module busunit(input logic clk, input logic reset, input logic qfull, input logic memreq, input logic memreqdir, input logic[31:0] memaddr, input logic[31:0] programcounter, input logic[1:0] buswidth, output logic validaddr, output logic validdata, output logic read, output logic write, output logic incprefetch, output logic[31:0] toprefetch, output logic memwait, output logic incpc, output logic memfinished, output logic[31:0] pcchain, inout logic[31:0] adbus, inout logic[31:0] memdata);
-
-	logic[2:0] busstate;
-	logic[31:0] memdatatemp;
-	localparam HIGHZ = 3'h0;
-	localparam OUTPUTPC = 3'h1;
-	localparam LATCHINST = 3'h2;
-	localparam OUTPUTMEM = 3'h3;
-	localparam OUTPUTDATA = 3'h4;
-	localparam LATCHDATA = 3'h5;
-
-	always_ff @(posedge clk)
-		begin
-			if (reset)
-				begin
-					busstate <= HIGHZ;
-				end
-			case (busstate)
-				HIGHZ: if (~memreq & qfull)
-						busstate <= HIGHZ;
-					else if (~memreq & ~qfull)
-						busstate <= OUTPUTPC;
-					else if (memreq)
-						busstate <= OUTPUTMEM;
-					else
-						busstate <= OUTPUTPC;
-				OUTPUTPC: busstate <= LATCHINST;
-				LATCHINST: if (~memreq & qfull)
-						busstate <= HIGHZ;
-					else if (~memreq & ~qfull)
-						busstate <= OUTPUTPC;
-					else if (memreq)
-						busstate <= OUTPUTMEM;
-					else
-						busstate <= OUTPUTPC;
-
-				OUTPUTMEM:	if (memreqdir) //1 = output
-							busstate <= OUTPUTDATA;
-						else //0 = input
-							busstate <= LATCHDATA;
-				OUTPUTDATA: if (~memreq & qfull)
-						busstate <= HIGHZ;
-					else if (memreq)
-						busstate <= OUTPUTMEM; 
-					else
-						busstate <= OUTPUTPC;
-				LATCHDATA: if (~memreq & qfull)
-						busstate <= HIGHZ;
-					else if (memreq)
-						busstate <= OUTPUTMEM;
-					else
-						busstate <= OUTPUTPC;
-				default: busstate <= HIGHZ;
-			endcase
-		end	
-	always_comb
-			if (busstate == OUTPUTPC | busstate == LATCHINST)
-				memwait = 1;
-			else
-				memwait = 0;
-				
-	always_comb	
-			case(busstate)
-			HIGHZ: begin
-				toprefetch = 0;
-				pcchain = 0;
-				adbus = 'hZ;
-				validaddr = 0;
-				validdata = 0;
-				read = 0;
-				write = 0;
-				incprefetch = 0;
-				incpc = 0;
-				memfinished = 0;
-				memdata = 'hZ;
-					end
-			OUTPUTPC: begin
-				toprefetch = 0;
-				pcchain = 0;
-				adbus = programcounter;
-				validaddr = 1;
-				validdata = 0;
-				read = 1;
-				write = 0;
-				incprefetch = 0;
-				incpc = 0;
-				memfinished = 0;
-				memdata = 'hZ;
-			end
-			LATCHINST: begin
-					toprefetch = adbus;
-					pcchain = programcounter;
-					adbus = 'hZ;
-					validaddr = 0;
-					validdata = 1;
-					read = 1;
-					write = 0;
-					incprefetch = 1;
-					incpc = 1;
-					memfinished = 0;
-					memdata = 'hZ;
-				end
-			OUTPUTMEM: begin
-				toprefetch = 0;
-				pcchain = 0;
-				adbus = memaddr;
-				validaddr = 1;
-				validdata = 0;
-				read = 1;
-				write = 0;
-				incprefetch = 0;
-				incpc = 0;
-				memfinished = 0;
-				memdata = 'hZ;
-			end
-			OUTPUTDATA: begin
-					toprefetch = 0;
-					pcchain = 0;
-					case (buswidth)
-						0: adbus = memreqdir ? {24'b0,memdata[7:0]} : 'hZ;
-						1: adbus = memreqdir ? {16'b0,memdata[15:0]} : 'hZ;
-						2: adbus = memreqdir ? memdata : 'hZ;
-						default: adbus = 'hZ;
-					endcase
-					validaddr = 0;
-					validdata = 1;
-					read = 0;
-					write = 1;
-					incprefetch = 0;
-					incpc = 0;
-					memfinished = 1;
-					memdata = 'hZ;
-				end
-			LATCHDATA: begin
-					toprefetch = 0;
-					pcchain = 0;
-					adbus = 'hZ;
-					validaddr = 0;
-					validdata = 1;
-					read = 1;
-					write = 0;
-					incprefetch = 0;
-					incpc = 0;
-					memfinished = 1;
-					case (buswidth)
-						0: memdata = memreqdir ? 'hZ : {24'b0,adbus[7:0]};
-						1: memdata = memreqdir ? 'hZ : {16'b0,adbus[15:0]};
-						default: memdata = memreqdir ? 'hZ : adbus;
-					endcase
-				end
-			default: begin
-				toprefetch = 0;
-				pcchain = 0;
-				adbus = 'hZ;
-				validaddr = 0;
-				validdata = 0;
-				read = 0;
-				write = 0;
-				incprefetch = 0;
-				incpc = 0;
-				memfinished = 0;
-				memdata = 'hZ;
-			end
-			endcase
-	//always_comb memdata = memreqdir ? 'hZ : adbus; 
-	
+module busunit(input logic clk, input logic reset, input logic instreq, input logic memreq, input logic memreqdir, input logic[31:0] memaddr, input logic[31:0] programcounter, input logic[1:0] buswidth,
+                output logic[31:0] toprefetch, output logic prefetchwait, output logic memwait, output logic incpc, output logic memfinished, output logic[31:0] pcchain,
+                output logic[31:0] memdatai, input logic[31:0] memdatao,
+                output logic[31:0] membuso, input logic[31:0] membusi,
+                output logic[31:0] writeaddr, readaddr,
+                output logic datareq, output logic datasend, output logic[1:0] membuswidth, output logic[1:0] readmembuswidth);
+                
+                localparam TRANSMIT_WAIT = 0;
+                localparam TRANSMIT = 1;
+                localparam TRANSMIT_DONE = 2;
+                
+                localparam RECIEVE_IDLE = 0;
+                localparam RECIEVE_DATA = 1;
+                localparam RECIEVE_INST = 2;
+                localparam RECIEVE_DATA_DONE = 3;
+                
+                logic[1:0] txstate, rxstate;
+                
+                always_ff @(posedge clk)
+                    if (reset)
+                        begin
+                            txstate <= TRANSMIT_WAIT;
+                            rxstate <= RECIEVE_IDLE;
+                            pcchain <= 0;
+                        end
+                    else
+                        begin
+                        case (txstate)
+                            TRANSMIT_WAIT: if (memreq & memreqdir)
+                                                txstate <= TRANSMIT;
+                            TRANSMIT: txstate <= TRANSMIT_DONE;
+                            TRANSMIT_DONE: txstate <= TRANSMIT_WAIT;
+                        endcase
+                        
+                        case (rxstate)
+                            RECIEVE_IDLE: if (memreq & ~memreqdir)
+                                                rxstate <= RECIEVE_DATA;
+                                          else if (instreq)
+                                                rxstate <= RECIEVE_INST;
+                            RECIEVE_DATA: begin
+                                            rxstate <= RECIEVE_DATA_DONE;
+                                         end
+                            RECIEVE_INST: begin
+                                                pcchain <= programcounter;
+                                             if (memreq & ~memreqdir)
+                                                rxstate <= RECIEVE_DATA;
+                                             else if (instreq)
+                                                rxstate <= RECIEVE_INST;
+                                          end
+                                                
+                            RECIEVE_DATA_DONE: if (memreq & ~memreqdir)
+                                                rxstate <= RECIEVE_DATA;
+                                          else if (instreq)
+                                                rxstate <= RECIEVE_INST;
+                                          else
+                                                rxstate <= RECIEVE_IDLE;
+                                                
+                        endcase
+                    end
+                
+                always_comb
+                    begin
+                        case (txstate)
+                            TRANSMIT_WAIT: begin
+                                            membuso = 0;
+                                            datasend = 0;
+                                            membuswidth = 0;
+                                            writeaddr = 0;
+                                           end
+                            TRANSMIT: begin
+                                        membuso = memdatao;
+                                        datasend = 1;
+                                        membuswidth = buswidth;
+                                        writeaddr = memaddr;
+                                      end
+                            TRANSMIT_DONE: begin
+                                            membuso = 0;
+                                            datasend = 0;
+                                            membuswidth = 0;
+                                            writeaddr = 0;
+                                           end
+                            default: begin
+                                        membuso = 0;
+                                        datasend = 0;
+                                        membuswidth = 0;
+                                        writeaddr = 0;
+                                     end
+                        endcase
+                        
+                        case (rxstate)
+                            RECIEVE_IDLE: begin
+                                            toprefetch = membusi;
+                                            incpc = 0;
+                                            datareq = 0;
+                                            readmembuswidth = 0;
+                                            readaddr = 0;
+                                            memdatai = 0;
+                                          end
+                            RECIEVE_DATA: begin
+                                            toprefetch = 0;
+                                            incpc = 0;
+                                            datareq = 1;
+                                            readmembuswidth = buswidth;
+                                            readaddr = memaddr;
+                                            memdatai = membusi;
+                                          end
+                            RECIEVE_INST: begin
+                                            toprefetch = membusi;
+                                            incpc = 1;
+                                            datareq = 1;
+                                            readmembuswidth = 2;
+                                            readaddr = programcounter;
+                                          end
+                            RECIEVE_DATA_DONE: begin
+                                            toprefetch = 0;
+                                            incpc = 0;
+                                            datareq = 0;
+                                            readmembuswidth = buswidth;
+                                            readaddr = memaddr;
+                                            memdatai = membusi;
+                                          end
+                        endcase
+                        
+                        if (memreq | txstate != TRANSMIT_WAIT | (rxstate != RECIEVE_IDLE & rxstate != RECIEVE_INST))
+                            memwait = 1;
+                        else
+                            memwait = 0;
+                            
+                        if (txstate == TRANSMIT | rxstate == RECIEVE_DATA_DONE )
+                            memfinished = 1;
+                        else
+                            memfinished = 0;
+                            
+                        if (instreq  & (rxstate != RECIEVE_INST & rxstate != RECIEVE_IDLE))
+                            prefetchwait = 1;
+                        else
+                            prefetchwait = 0; 
+                    end
+                
 endmodule
 
 //Prefetch unit
 //Inputs: clk, reset, instreq, instadd, insttoadd
 //Outputs: qfull, tofetch
-module prefetcher(input logic clk, input logic reset, input logic instreq, input logic instadd, input logic[31:0] insttoadd, input logic[31:0] pcchain, output logic qempty, output logic qfull, output logic[31:0] tofetch, output logic[31:0] programcounterinst);
-	logic[2:0] ftrack;
-	logic[2:0] instqcount[5:0];
-	logic[31:0] instq[6];
-	logic[31:0] pcq[6];
-	localparam QEMPTY = 0;
-	localparam Q1 = 1;
-	localparam Q2 = 2;
-	localparam Q3 = 3;
-	localparam Q4 = 4;
-	localparam Q5 = 5;
-	localparam QFULL = 6;
-	
-	always_comb
-		begin
-			if (ftrack == QFULL)
-				qfull = 1;
-			else
-				qfull = 0;
+module prefetcher(input logic clk, input logic reset, input logic prefetchwait, input logic instreq, input logic[31:0] insttoadd, input logic[31:0] pcchain,
+                output logic stallpipe, output logic addinst, output logic[31:0] tofetch, output logic[31:0] programcounterinst);
+localparam IDLE = 0;
+localparam FETCHDISPATCH = 1;
+localparam FETCHQUEUE = 2;
+localparam DISPATCH = 3;
+logic[1:0] prefetchstate, laststate;
+logic qfull;
+logic[2:0] qstatus, nextq;
+logic[2:0] qpos[6];
+logic[31:0] queue[6];
+logic[31:0] qpc[6];
 
-			if (ftrack == QEMPTY)
-				qempty = 1;
-			else
-				qempty = 0;
-		end
-	
-
-	always_comb
-		if (instqcount[0] == 0)
-			begin
-				tofetch = instq[0];
-				programcounterinst = pcq[0];
-			end
-		else if(instqcount[1] == 0)
-			begin
-				tofetch = instq[1];
-				programcounterinst = pcq[1];
-			end
-		else if(instqcount[2] == 0)
-			begin
-				tofetch = instq[2];
-				programcounterinst = pcq[2];
-			end
-		else if(instqcount[3] == 0)
-			begin
-				tofetch = instq[3];
-				programcounterinst = pcq[3];
-			end
-		else if(instqcount[4] == 0)
-			begin
-				tofetch = instq[4];
-				programcounterinst = pcq[4];
-			end
-		else if(instqcount[5] == 0)
-			begin
-				tofetch = instq[5];
-				programcounterinst = pcq[5];
-			end
-		else
-			begin
-				tofetch = 'h0;
-				programcounterinst = 'h0;
-			end
-	always_ff @(negedge clk)
-		if (reset)
-			ftrack <= QEMPTY;
-		else
-			case (ftrack)
-				QEMPTY:
-					if (instreq & instadd | ~instreq & ~instadd)
-						ftrack <= QEMPTY;
-					else if (instadd & ~instreq)
-						ftrack <= Q1;
-				Q1:	if (instreq & instadd | ~instreq & ~instadd)
-						ftrack <= Q1;
-					else if (instadd & ~instreq)
-						ftrack <= Q2;
-					else if (~instadd & instreq)
-						ftrack <= QEMPTY;
-				Q2:
-					if (instreq & instadd | ~instreq & ~instadd)
-						ftrack <= Q2;
-					else if (instadd & ~instreq)
-						ftrack <= Q3;
-					else if (~instadd & instreq)
-						ftrack <= Q1;
-				Q3:
-					if (instreq & instadd | ~instreq & ~instadd)
-						ftrack <= Q3;
-					else if (instadd & ~instreq)
-						ftrack <= Q4;
-					else if (~instadd & instreq)
-						ftrack <= Q2;
-				Q4:
-					if (instreq & instadd | ~instreq & ~instadd)
-						ftrack <= Q4;
-					else if (instadd & ~instreq)
-						ftrack <= Q5;
-					else if (~instadd & instreq)
-						ftrack <= Q3;
-				Q5:
-					if (instreq & instadd | ~instreq & ~instadd)
-						ftrack <= Q5;
-					else if (instadd & ~instreq)
-						ftrack <= QFULL;
-					else if (~instadd & instreq)
-						ftrack <= Q4;
-				QFULL:
-					if (instreq & instadd | ~instreq & ~instadd)
-						ftrack <= QFULL;
-					else if (~instadd & instreq)
-						ftrack <= Q5;
-			endcase
-	
 	always_ff @(posedge clk)
-		begin
-			if (reset)
-				begin
-					instqcount <= '{'b111,'b111,'b111,'b111,'b111,'b111};
-//					tofetch <= 0;
-//					programcounterinst <= 0;
-					instq <= '{0,0,0,0,0,0};
-					pcq <= '{0,0,0,0,0,0};
-				end
-			else
-			 	begin
-			
-			if (instreq)
-				begin
-					if (instqcount[0] == 0)
-						begin
-							instqcount[0] <= 3'b111;
-//							tofetch <= instq[0];
-//							programcounterinst <= pcq[0];
-							instq[0] <= 0;
-						end
-					else if (instqcount[0] != 0 & instqcount[0] != 'b111)
-						instqcount[0] <= instqcount[0] - 1;
-				
-					if (instqcount[1] == 0)
-						begin
-							instqcount[1] <= 3'b111;
-//							tofetch <= instq[1];
-//							programcounterinst <= pcq[1];
-							instq[1] <= 0;
-						end
-					else if (instqcount[1] != 0 & instqcount[1] != 'b111)
-						instqcount[1] <= instqcount[1] - 1;
+	   begin
+	       if (reset)
+	           begin
+	               prefetchstate <= IDLE;
+	               qfull <= 0;
+	               qpos <= {3'b111, 3'b111, 3'b111, 3'b111, 3'b111, 3'b111};
+	               queue <= {32'b0, 32'b0, 32'b0, 32'b0, 32'b0, 32'b0};
+	               qpc <= {32'b0, 32'b0, 32'b0, 32'b0, 32'b0, 32'b0};
+	               qstatus <= 0;
+	               tofetch <= 0;
+	           end
+	       else
+	           begin
+	               if (~prefetchwait)
+	                   begin
+	                       qstatus <= nextq;
+                           case (prefetchstate)
+                               IDLE: if (~qfull & ~instreq)
+                                       prefetchstate <= FETCHQUEUE;
+                                     else if (~qfull & instreq)
+                                       prefetchstate <= FETCHDISPATCH;
+                                     else if (qfull & ~instreq)
+                                       prefetchstate <= IDLE;
+                                     else if (qfull & instreq)
+                                       prefetchstate <= DISPATCH;
+                               FETCHDISPATCH: if (~qfull & ~instreq)
+                                       prefetchstate <= FETCHQUEUE;
+                                     else if (~qfull & instreq)
+                                       prefetchstate <= FETCHDISPATCH;
+                                     else if (qfull & ~instreq)
+                                       prefetchstate <= IDLE;
+                                     else if (qfull & instreq)
+                                       prefetchstate <= DISPATCH;
+                               FETCHQUEUE: if (~qfull & ~instreq)
+                                       prefetchstate <= FETCHQUEUE;
+                                     else if (~qfull & instreq)
+                                       prefetchstate <= FETCHDISPATCH;
+                                     else if (qfull & ~instreq)
+                                       prefetchstate <= IDLE;
+                                     else if (qfull & instreq)
+                                       prefetchstate <= DISPATCH;
+                               DISPATCH: if (~qfull & ~instreq)
+                                       prefetchstate <= FETCHQUEUE;
+                                     else if (~qfull & instreq)
+                                       prefetchstate <= FETCHDISPATCH;
+                                     else if (qfull & ~instreq)
+                                       prefetchstate <= IDLE;
+                                     else if (qfull & instreq)
+                                       prefetchstate <= DISPATCH;
+                                endcase
+                                    
+                                    if (instreq)
+                                   if (qpos[0] == 0)
+                                       begin
+                                           qpos[0] <= 7;
+                                           programcounterinst <= qpc[0];
+                                           qpc[0] <= 0;
+                                           tofetch <= queue[0];
+                                           
+                                           if (qpos[1] != 0 & qpos[1] != 7)
+                                               qpos[1] <= qpos[1] - 1;
+                                           if (qpos[2] != 0 & qpos[2] != 7)
+                                               qpos[2] <= qpos[2] - 1;
+                                           if (qpos[3] != 0 & qpos[3] != 7)
+                                               qpos[3] <= qpos[3] - 1;
+                                           if (qpos[4] != 0 & qpos[4] != 7)
+                                               qpos[4] <= qpos[4] - 1;
+                                           if (qpos[5] != 0 & qpos[5] != 7)
+                                               qpos[5] <= qpos[5] - 1;
+                                       end
+                                   else if (qpos[1] == 0)
+                                       begin
+                                           qpos[1] <= 7;
+                                           programcounterinst <= qpc[1];
+                                           qpc[1] <= 0;
+                                           tofetch <= queue[1];
+                                           
+                                           if (qpos[0] != 0 & qpos[0] != 7)
+                                               qpos[0] <= qpos[0] - 1;
+                                           if (qpos[2] != 0 & qpos[2] != 7)
+                                               qpos[2] <= qpos[2] - 1;
+                                           if (qpos[3] != 0 & qpos[3] != 7)
+                                               qpos[3] <= qpos[3] - 1;
+                                           if (qpos[4] != 0 & qpos[4] != 7)
+                                               qpos[4] <= qpos[4] - 1;
+                                           if (qpos[5] != 0 & qpos[5] != 7)
+                                               qpos[5] <= qpos[5] - 1; 
+                                       end
+                                   else if (qpos[2] == 0)
+                                       begin
+                                           qpos[2] <= 7;
+                                           programcounterinst <= qpc[2];
+                                           qpc[2] <= 0;
+                                           tofetch <= queue[2];
+                                           
+                                           if (qpos[0] != 0 & qpos[0] != 7)
+                                               qpos[0] <= qpos[0] - 1;
+                                           if (qpos[1] != 0 & qpos[1] != 7)
+                                               qpos[1] <= qpos[1] - 1;
+                                           if (qpos[3] != 0 & qpos[3] != 7)
+                                               qpos[3] <= qpos[3] - 1;
+                                           if (qpos[4] != 0 & qpos[4] != 7)
+                                               qpos[4] <= qpos[4] - 1;
+                                           if (qpos[5] != 0 & qpos[5] != 7)
+                                               qpos[5] <= qpos[5] - 1;
+                                       end
+                                   else if (qpos[3] == 0)
+                                       begin
+                                           qpos[3] <= 7;
+                                           programcounterinst <= qpc[3];
+                                           qpc[3] <= 0;
+                                           tofetch <= queue[3];
+                                           
+                                           if (qpos[0] != 0 & qpos[0] != 7)
+                                               qpos[0] <= qpos[0] - 1;
+                                           if (qpos[1] != 0 & qpos[1] != 7)
+                                               qpos[1] <= qpos[1] - 1;
+                                           if (qpos[2] != 0 & qpos[2] != 7)
+                                               qpos[2] <= qpos[2] - 1;
+                                           if (qpos[4] != 0 & qpos[4] != 7)
+                                               qpos[4] <= qpos[4] - 1;
+                                           if (qpos[5] != 0 & qpos[5] != 7)
+                                               qpos[5] <= qpos[5] - 1;
+                                       end
+                                   else if (qpos[4] == 0)
+                                       begin
+                                           qpos[4] <= 7;
+                                           programcounterinst <= qpc[4];
+                                           qpc[4] <= 0;
+                                           tofetch <= queue[4];
+                                           
+                                           if (qpos[0] != 0 & qpos[0] != 7)
+                                               qpos[0] <= qpos[0] - 1;
+                                           if (qpos[1] != 0 & qpos[1] != 7)
+                                               qpos[1] <= qpos[1] - 1;
+                                           if (qpos[2] != 0 & qpos[2] != 7)
+                                               qpos[2] <= qpos[2] - 1;
+                                           if (qpos[3] != 0 & qpos[3] != 7)
+                                               qpos[3] <= qpos[3] - 1;
+                                           if (qpos[5] != 0 & qpos[5] != 7)
+                                               qpos[5] <= qpos[5] - 1;
+                                       end
+                                   else if (qpos[5] == 0)
+                                       begin
+                                           qpos[5] <= 7;
+                                           programcounterinst <= qpc[5];
+                                           qpc[5] <= 0;
+                                           tofetch <= queue[5];
+                                           
+                                           if (qpos[0] != 0 & qpos[0] != 7)
+                                               qpos[0] <= qpos[0] - 1;
+                                           if (qpos[1] != 0 & qpos[1] != 7)
+                                               qpos[1] <= qpos[1] - 1;
+                                           if (qpos[2] != 0 & qpos[2] != 7)
+                                               qpos[2] <= qpos[2] - 1;
+                                           if (qpos[3] != 0 & qpos[3] != 7)
+                                               qpos[3] <= qpos[3] - 1;
+                                           if (qpos[4] != 0 & qpos[4] != 7)
+                                               qpos[4] <= qpos[4] - 1;
+                                       end
+                                       
+                                       if (addinst)
+                           if (qpos[0] == 7)
+                               begin
+                                   queue[0] <= insttoadd;
+                                   qpos[0] <= nextq;
+                                   qpc[0] <= pcchain;
+                               end
+                           else if (qpos[1] == 7)
+                               begin
+                                   queue[1] <= insttoadd;
+                                   qpos[1] <= nextq;
+                                   qpc[1] <= pcchain;
+                               end
+                           
+                           else if (qpos[2] == 7)
+                               begin
+                                   queue[2] <= insttoadd;
+                                   qpos[2] <= nextq;
+                                   qpc[2] <= pcchain;
+                               end
+                           
+                           else if (qpos[3] == 7)
+                               begin
+                                   queue[3] <= insttoadd;
+                                   qpos[3] <= nextq;
+                                   qpc[3] <= pcchain;
+                               end
+                           
+                           else if (qpos[4] == 7)
+                               begin
+                                   queue[4] <= insttoadd;
+                                   qpos[4] <= nextq;
+                                   qpc[4] <= pcchain;
+                               end
+                           
+                           else if (qpos[5] == 7)
+                               begin
+                                   queue[5] <= insttoadd;
+                                   qpos[5] <= nextq;
+                                   qpc[5] <= pcchain;
+                               end
+                       end
+	           end
+	   end
+	   
+	   always_comb
+	       begin
+	           if (qpos[5] == 3'b111 & qpos[4] == 3'b111 & qpos[3] == 3'b111 & qpos[2] == 3'b111 & qpos[1] == 3'b111 & qpos[0] == 3'b111)
+	               stallpipe = 1;
+	           else
+	               stallpipe = 0;
+	               
+	           if (~qfull & ~instreq)
+	               begin
+	                   if (qpos[5] == 3'b111 & qpos[4] == 3'b111 & qpos[3] == 3'b111 & qpos[2] == 3'b111 & qpos[1] == 3'b111 & qpos[0] == 3'b111)
+	                       begin
+	                           addinst = 1;
+	                           nextq = qstatus;
+	                       end
+	                   else
+	                       begin
+	                           addinst = 1;
+	                           nextq = qstatus + 1;
+	                       end
+                   end
+               else if (~qfull & instreq)
+                   begin
+	                   nextq = qstatus;
+	                   addinst = 1;
+                   end
+               else if (qfull & ~instreq)
+                 begin
+	                   nextq = qstatus;
+	                   addinst = 0;
+                   end
+               else if (qfull & instreq)
+                   begin
+	                   nextq = qstatus - 1;
+	                   addinst = 0;
+                   end
 
-					if (instqcount[2] == 0)
-						begin
-							instqcount[2] <= 3'b111;
-//							tofetch <= instq[2];
-//							programcounterinst <= pcq[2];
-							instq[2] <= 0;
-						end
-					else if (instqcount[2] != 0 & instqcount[2] != 'b111)
-						instqcount[2] <= instqcount[2] - 1;
-
-					if (instqcount[3] == 0)
-						begin
-							instqcount[3] <= 3'b111;
-//							tofetch <= instq[3];
-//							programcounterinst <= pcq[3];
-							instq[3] <= 0;
-						end
-					else if (instqcount[3] != 0 & instqcount[3] != 'b111)
-						instqcount[3] <= instqcount[3] - 1;
-
-					if (instqcount[4] == 0)
-						begin
-							instqcount[4] <= 3'b111;
-//							tofetch <= instq[4];
-//							programcounterinst <= pcq[4];
-							instq[4] <= 0;
-						end
-					else if (instqcount[4] != 0 & instqcount[4] != 'b111)
-						instqcount[4] <= instqcount[4] - 1;
-
-					if (instqcount[5] == 0)
-						begin
-							instqcount[5] <= 3'b111;
-//							tofetch <= instq[5];
-//							programcounterinst <= pcq[5];
-							instq[5] <= 0;
-						end
-					else if (instqcount[5] != 0 & instqcount[5] != 'b111)
-						instqcount[5] <= instqcount[5] - 1;
-
-				end
-			if (instadd)
-				begin
-					if (instqcount[0] == 3'b111)
-						begin
-							instqcount[0] <= ftrack;
-							instq[0] <= insttoadd;
-							pcq[0] <= pcchain;
-						end
-					else if (instqcount[1] == 3'b111)
-						begin
-							instqcount[1] <= ftrack;
-							instq[1] <= insttoadd;
-							pcq[1] <= pcchain;
-						end
-					else if (instqcount[2] == 3'b111)
-						begin
-							instqcount[2] <= ftrack;
-							instq[2] <= insttoadd;
-							pcq[2] <= pcchain;
-						end
-					else if (instqcount[3] == 3'b111)
-						begin
-							instqcount[3] <= ftrack;
-							instq[3] <= insttoadd;
-							pcq[3] <= pcchain;
-						end
-					else if (instqcount[4] == 3'b111)
-						begin
-							instqcount[4] <= ftrack;
-							instq[4] <= insttoadd;
-							pcq[4] <= pcchain;
-						end
-					else if (instqcount[5] == 3'b111)
-						begin
-							instqcount[5] <= ftrack;
-							instq[5] <= insttoadd;
-							pcq[5] <= pcchain;
-						end
-				end
-			end
-		end
+	       end
+	   
 endmodule
 
 //Fetch unit
@@ -760,11 +761,11 @@ endmodule
 //Inputs: Pointer
 //Outputs: Microcode
 module microcode_rom(input logic[7:0] pointer, output logic[48:0] microcode_line);
-	//(*ramstyle = "M20K"*)
-	logic[48:0] microcode[150:0];
-	initial $readmemh("microcode.txt", microcode);
-	
-	always_comb microcode_line = microcode[pointer][48:0];
+    logic[48:0] microcode[112];
+    assign microcode_line = microcode[pointer];
+    initial begin
+        $readmemh("microcode.hex", microcode);
+    end
 endmodule
 
 //Decoder
@@ -881,34 +882,34 @@ module ma10k_frontend(input logic[31:0] instruction, output logic[15:0] immediat
 			JUMPREL: opcode_pointer = 58;
 			JUMPR: opcode_pointer = 59;
 			JUMPI: opcode_pointer = 60;
-			CALL: opcode_pointer = 61;
-			RET: opcode_pointer = 63;
-			LRR: opcode_pointer = 65;
-			LRI: opcode_pointer = 66;
-			LSPR: opcode_pointer = 67;
-			LUI: opcode_pointer = 68;
-			LLI: opcode_pointer = 69;
-			SSPR: opcode_pointer = 70;
-			STR: opcode_pointer = 71;
-			STI: opcode_pointer = 72;
-			LREL: opcode_pointer = 73;
-			SREL: opcode_pointer = 74;
-			PUSH: opcode_pointer = 75;
-			POP: opcode_pointer = 77;
-			STQW: opcode_pointer = 79;
-			LDQW: opcode_pointer = 80;
-			STHW: opcode_pointer = 81;
-			LDHW: opcode_pointer = 82;
-			PRG: opcode_pointer = 83;
-			RESPSP: opcode_pointer = 86;
-			SPSP:	opcode_pointer = 87;
-			GPSP:	opcode_pointer = 88;
-			SCOP: opcode_pointer = 89;
-			GCOP: opcode_pointer = 90;
-			EI: opcode_pointer = 91;
-			DI: opcode_pointer = 92;
-			GPTIMER: opcode_pointer = 93;
-			RESET: opcode_pointer = 94;
+			CALL: opcode_pointer = 62;
+			RET: opcode_pointer = 64;
+			LRR: opcode_pointer = 67;
+			LRI: opcode_pointer = 68;
+			LSPR: opcode_pointer = 70;
+			LUI: opcode_pointer = 71;
+			LLI: opcode_pointer = 72;
+			SSPR: opcode_pointer = 73;
+			STR: opcode_pointer = 74;
+			STI: opcode_pointer = 75;
+			LREL: opcode_pointer = 77;
+			SREL: opcode_pointer = 78;
+			PUSH: opcode_pointer = 79;
+			POP: opcode_pointer = 81;
+			STQW: opcode_pointer = 83;
+			LDQW: opcode_pointer = 84;
+			STHW: opcode_pointer = 85;
+			LDHW: opcode_pointer = 86;
+			PRG: opcode_pointer = 87;
+			RESPSP: opcode_pointer = 90;
+			SPSP:	opcode_pointer = 91;
+			GPSP:	opcode_pointer = 92;
+			SCOP: opcode_pointer = 93;
+			GCOP: opcode_pointer = 94;
+			EI: opcode_pointer = 95;
+			DI: opcode_pointer = 96;
+			GPTIMER: opcode_pointer = 97;
+			RESET: opcode_pointer = 98;
 			default: opcode_pointer = 0;
 		endcase
 endmodule
@@ -920,7 +921,7 @@ module pipebreak(input logic clk, input logic reset, input logic stall, input lo
 	always_ff @(posedge clk)
 		begin
 			if (reset)
-				{afunc, bfunc, regtowritefunc, programcountero, intout, nmiout} <= {32'b0,32'b0,4'b0, 32'b0, 3'b0, 1'b0};
+				{afunc, bfunc, regtowritefunc, programcountero, intout, nmiout, icode_pointero} <= {32'b0,32'b0,4'b0, 32'b0, 3'b0, 1'b0, 7'b0};
 			else
 				if (~stall)
 					begin
@@ -937,7 +938,7 @@ module execute_unit(input logic clk, input logic reset, input logic newmicrocode
 							output logic[31:0] execout, output logic stalldispatch, output logic lt, output logic eq, output logic[4:0] executec, output logic[48:0] fucode);
 	logic[48:0] microcode_line;
 	logic[31:0] aluout, shiftout, multout;
-	logic shiftdone, shiften, alufunctype, highlow, accumulate, shiftstalldispatch, multreset, notcount0, shiftdir, rotate, signextend;
+	logic shiftdone, shiften, alufunctype, highlow, accumulate, shiftstalldispatch, multreset, shiftdir, rotate, signextend;
 	logic[1:0] multmuxas, multmuxbs;
 	logic[2:0] alufunc,multdemuxs;
 	logic[7:0] linenumber;
@@ -949,16 +950,11 @@ module execute_unit(input logic clk, input logic reset, input logic newmicrocode
 		
 	always_ff @(posedge clk)// or posedge reset)// or posedge newmicrocode)
 		begin
-			if(reset | microcode_line[1])// | newmicrocode | microcode_line[1])
+			if(reset | microcode_line[32])// | newmicrocode | microcode_line[1])
 					executec <= 0;
-			else if (notcount0 & ~memaccess)
+			else if (~memaccess)
 				executec <= executec + 1'b1;
 		end
-	always_ff @(negedge clk)// or posedge reset)
-		if (~notcount0)
-			notcount0 <= 1;
-		else if (reset | microcode_line[1])
-			notcount0 <= 0;
 
 	always_comb
 		case (funcsel)
@@ -1063,8 +1059,10 @@ endmodule
 //Inputs: clk, reset, fromexecute, portb, addrsel, datasel, requestdbus, dbusreqdir, buswait
 //Outputs: dbusreq, dbusdir, addr, towriteback, stalldispatch 
 //Inout: data
-module mem_access_unit(input logic clk, input logic reset, input logic[31:0] fromexecute, input logic[31:0] portb, input logic addrsel, input logic datasel, input logic requestdbus, input logic dbusreqdir, input logic buswait, input logic memfinished, output logic dbusreq, output logic dbusdir, output logic[31:0] addr, output logic[31:0] towriteback, output logic stalldispatch, inout logic[31:0] data);
+module mem_access_unit(input logic[31:0] fromexecute, input logic[31:0] portb, input logic addrsel, input logic datasel, input logic requestdbus, input logic dbusreqdir, input logic buswait, input logic memfinished, output logic dbusreq, output logic dbusdir, output logic[31:0] addr, output logic[31:0] towriteback, output logic stalldispatch, input logic[31:0] datai, output logic[31:0] datao);
 	/* verilator lint_off ALWCOMBORDER */
+	
+	logic[31:0] currentdata;
 	always_comb
 		begin
 			if (memfinished)
@@ -1074,10 +1072,10 @@ module mem_access_unit(input logic clk, input logic reset, input logic[31:0] fro
 
 			//dbusreq = memfinished ? 1'h0 : requestdbus;
 			dbusdir = dbusreqdir;
-			addr = requestdbus ? (addrsel ? portb : fromexecute) : 32'hZ;
-			data = dbusreqdir ? (datasel ? portb : fromexecute) : 'hZ;
-			towriteback = dbusreqdir ? 32'hZ : data;
-			if (requestdbus & ~memfinished)
+			addr = addrsel ? portb : fromexecute;
+			datao = datasel ? portb : fromexecute; //datasel ? portb : fromexecute;
+			towriteback = datai;
+			if (~memfinished & requestdbus)
 				stalldispatch = 1;
 			else
 				stalldispatch = 0;
