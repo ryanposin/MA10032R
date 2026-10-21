@@ -3,18 +3,18 @@
 //Input: clk, reset, increment, decrement, write enable, d
 //Output: q
 module ma10k_special_reg (input wire clk, input wire reset, input wire inc, input wire dec, input wire we, input logic[31:0] d, output logic[31:0] q);
-	always_ff @(posedge clk or posedge we)
+	always_ff @(posedge clk)
 		begin
 			if (reset)
 				q <= 0;
 			else
 				if (we)
 				    q <= d;
-				else if (dec)
+				else if (~we & dec)
 				    q <= q - 4;
-				else if (inc)
+				else if (~we & inc)
 					q <= q + 4;
-				else if (inc & dec)
+				else if (~we & inc & dec)
 					q <= q;
 			
 		end
@@ -313,7 +313,7 @@ endmodule
 //Inputs: clk, reset, qfull, memreq, memreqdir, memaddr, programcounter
 //Outputs: validaddr, validdata, read, write, incprefetch, toprefetch, memwait, incpc
 //Inout: adbus, memdata
-module busunit(input logic clk, input logic reset, input logic instreq, input logic memreq, input logic memreqdir, input logic[31:0] memaddr, input logic[31:0] programcounter, input logic[1:0] buswidth,
+module busunit(input logic clk, input logic reset, input logic instreq, input logic memreq, input logic memreqdir, input logic[31:0] memaddr, input logic[31:0] programcounter, input logic[1:0] buswidth, input logic readwait,
                 output logic[31:0] toprefetch, output logic prefetchwait, output logic memwait, output logic incpc, output logic memfinished, output logic[31:0] pcchain,
                 output logic[31:0] memdatai, input logic[31:0] memdatao,
                 output logic[31:0] membuso, input logic[31:0] membusi,
@@ -336,7 +336,7 @@ module busunit(input logic clk, input logic reset, input logic instreq, input lo
                         begin
                             txstate <= TRANSMIT_WAIT;
                             rxstate <= RECIEVE_IDLE;
-                            pcchain <= 0;
+                            memdatai <= 0;
                         end
                     else
                         begin
@@ -353,10 +353,13 @@ module busunit(input logic clk, input logic reset, input logic instreq, input lo
                                           else if (instreq)
                                                 rxstate <= RECIEVE_INST;
                             RECIEVE_DATA: begin
-                                            rxstate <= RECIEVE_DATA_DONE;
+                                            if (~readwait)
+                                                begin
+                                                    memdatai <= membusi;
+                                                    rxstate <= RECIEVE_DATA_DONE;
+                                                end
                                          end
                             RECIEVE_INST: begin
-                                                pcchain <= programcounter;
                                              if (memreq & ~memreqdir)
                                                 rxstate <= RECIEVE_DATA;
                                              else if (instreq)
@@ -409,7 +412,7 @@ module busunit(input logic clk, input logic reset, input logic instreq, input lo
                                             datareq = 0;
                                             readmembuswidth = 0;
                                             readaddr = 0;
-                                            memdatai = 0;
+                                            pcchain = 0;
                                           end
                             RECIEVE_DATA: begin
                                             toprefetch = 0;
@@ -417,7 +420,7 @@ module busunit(input logic clk, input logic reset, input logic instreq, input lo
                                             datareq = 1;
                                             readmembuswidth = buswidth;
                                             readaddr = memaddr;
-                                            memdatai = membusi;
+                                            pcchain = 0;
                                           end
                             RECIEVE_INST: begin
                                             toprefetch = membusi;
@@ -425,6 +428,7 @@ module busunit(input logic clk, input logic reset, input logic instreq, input lo
                                             datareq = 1;
                                             readmembuswidth = 2;
                                             readaddr = programcounter;
+                                            pcchain = programcounter;
                                           end
                             RECIEVE_DATA_DONE: begin
                                             toprefetch = 0;
@@ -432,11 +436,11 @@ module busunit(input logic clk, input logic reset, input logic instreq, input lo
                                             datareq = 0;
                                             readmembuswidth = buswidth;
                                             readaddr = memaddr;
-                                            memdatai = membusi;
+                                            pcchain = 0;
                                           end
                         endcase
                         
-                        if (memreq | txstate != TRANSMIT_WAIT | (rxstate != RECIEVE_IDLE & rxstate != RECIEVE_INST))
+                        if (memreq | txstate != TRANSMIT_WAIT | (rxstate != RECIEVE_IDLE & rxstate != RECIEVE_INST & readwait == 1))
                             memwait = 1;
                         else
                             memwait = 0;
@@ -446,7 +450,7 @@ module busunit(input logic clk, input logic reset, input logic instreq, input lo
                         else
                             memfinished = 0;
                             
-                        if (instreq  & (rxstate != RECIEVE_INST & rxstate != RECIEVE_IDLE))
+                        if (instreq  & (rxstate != RECIEVE_INST & rxstate != RECIEVE_IDLE) & readwait == 1)
                             prefetchwait = 1;
                         else
                             prefetchwait = 0; 
@@ -712,6 +716,11 @@ logic[31:0] qpc[6];
 	                   nextq = qstatus - 1;
 	                   addinst = 0;
                    end
+              else
+                begin
+                    addinst = 0;
+                    nextq = qstatus;
+                end
 
 	       end
 	   

@@ -2,7 +2,7 @@
 //Outputs: validaddr, validdata, read, write, buswidth[1:0] (0 = 8 bit, 1 = 16 bit, 2 = 32 bit)
 //Bidirectional: adbus[31:0]
 
-module processor_core(input logic clk, input logic reset, input logic nmi, input logic[2:0] intin,
+module processor_core(input logic clk, input logic reset, input logic nmi, input logic[2:0] intin, input logic readwait,
 								output logic intack,
                                 output logic[31:0] membuso, input logic[31:0] membusi,
                                 output logic[31:0] writeaddr, readaddr,
@@ -26,7 +26,7 @@ module processor_core(input logic clk, input logic reset, input logic nmi, input
 	always_ff @(posedge clk)
 		{feq, fneq, flt} <= {eq, noteq, lt};
 	always_ff @(posedge clk)
-		if (opcode_pointer >= 46 & opcode_pointer <= 64)
+		if (opcode_pointer >= 46 & opcode_pointer <= 64 & pipeready)
 			tempimm <= {{16{insout[31]}},insout[31:20],insout[11:8]};
 	always_ff @(posedge clk)
 		if (opcode_pointero == 91 | opcode_pointero == 92)
@@ -39,9 +39,9 @@ module processor_core(input logic clk, input logic reset, input logic nmi, input
 			pcdec = icodeo[2];
 			spinc = icodeo[3];
 			spdec = icodeo[4];
-			spwe = icodeo[5];
+			//spwe = icodeo[5];
 			pspwe = mode ?  icodeo[5] : 1'b0;
-			sspwe = mode ? 1'b0 : spwe;
+			sspwe = mode ? 1'b0 : icodeo[5];
 			pamuxs = icode[7:6];
 			pbmuxs = icode[9:8];
 			addrsel = icodeo[10];
@@ -97,7 +97,7 @@ module processor_core(input logic clk, input logic reset, input logic nmi, input
 	//Inputs: clk, reset, qfull, memreq, memreqdir, memaddr, programcounter
 	//Outputs: validaddr, validdata, read, write, incprefetch, toprefetch, memwait, memfinished
 	//Inout: adbus, memdatal
-	 busunit systembus(clk, internalreset, addinst, memreq, memreqdir, memaddr, programcounter, buswidth,
+	 busunit systembus(clk, internalreset | pcwe, addinst, memreq, memreqdir, memaddr, programcounter, buswidth, readwait,
                 toprefetch, prefetchwait, memwait, incpcfetch, memfinished, pcchain,
                 memdatai, memdatao,
                 membuso, membusi,
@@ -143,15 +143,15 @@ module processor_core(input logic clk, input logic reset, input logic nmi, input
 
 	//Pipeline forwarding
 	always_comb
-		if (insout[3:0] == regtowriteo & regtowriteo != 0)
+		if (insout[3:0] == regtowriteo & regtowriteo != 0 & opcode_pointer < 46 & opcode_pointer > 64)
 			begin
 				aforward = writeback;
 				bforward = outmuxb;
 			end
-		else if (insout[7:4] == regtowriteo & regtowriteo != 0)
+		else if (insout[7:4] == regtowriteo & regtowriteo != 0 & opcode_pointer < 46 & opcode_pointer > 64)
 			begin
 				aforward = outmuxa;
-				bforward = outmuxb;
+				bforward = writeback;
 			end
 		else
 			begin
@@ -161,7 +161,7 @@ module processor_core(input logic clk, input logic reset, input logic nmi, input
 
 	//Inputs: clk, reset, stall, icode[18], a, b, regtowrite
 	//Outputs: icodefunc, afunc, bfunc, regtowritefunc
-	pipebreak pipestage01(clk, internalreset | (pcwe & pipeready), ~pipeready | pcwe, (injectinst ? injectpointer : opcode_pointer), aforward, bforward, insout[11:8], programcounterinst, intin, nmi,
+	pipebreak pipestage01(clk, internalreset | pcwe, ~pipeready | pcwe, (injectinst ? injectpointer : opcode_pointer), aforward, bforward, insout[11:8], programcounterinst, intin, nmi,
 															opcode_pointero, ao, bo, regtowriteo, programcountero, intlatched, nmilatched);
 	
 	//Grab PC or port A
@@ -171,7 +171,7 @@ module processor_core(input logic clk, input logic reset, input logic nmi, input
 	ttb4inmux postpipeb(bo, tempimm, intaddr, 32'hFFFF_FFDC, ppbs, pipeb);
 	//Inputs: clk, reset, funcsel, ina, inb, pointer[6:0]
 //Outputs: execout, stalldispatch, lt, eq, executec, fucode
-	execute_unit exec(clk, internalreset,newmicrocode, funcsel, pipea, pipeb, opcode_pointero, stalldispatchmem,
+	execute_unit exec(clk, internalreset, newmicrocode, funcsel, pipea, pipeb, opcode_pointero, stalldispatchmem,
 														execout, stalldispatchexec, lt, eq, executec, icodeo);
 														
 	//Inputs: fromexecute, portb, addrsel, datasel, requestdbus, dbusreqdir, buswait, memfinished
