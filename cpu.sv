@@ -8,7 +8,7 @@ module processor_core(input logic clk, input logic reset, input logic nmi, input
                                 output logic[31:0] writeaddr, readaddr,
                                 output logic datareq, output logic datasend, output logic[1:0] membuswidth, output logic[1:0] readmembuswidth);
 
-	logic prefetchstallpipe, addinst, prefetchwait, mode, ucodereset, memfinished, pspreset, noteq, pccondout, rawpcwe, lt, eq, condpc, internalreset, qfull, memreq, memreqdir, incprefetch, memwait, instreq, pipeready, pcinc, pcdec, spinc, spdec, spwe, pcwe, regwe, stalldispatchexec, stalldispatchmem, addrsel, datasel, requestdbus, dbusreqdir, dbusdir, dbusreq, pamux_ext, pbmux_ext, newmicrocode, qempty, incpcfetch, breset, feq, fneq, flt, ppas, injectinst, nmilatched, inten, sspwe, pspwe;
+	logic instreqfetch, prefetchstallpipe, addinst, prefetchwait, mode, ucodereset, memfinished, pspreset, noteq, pccondout, rawpcwe, lt, eq, condpc, internalreset, qfull, memreq, memreqdir, incprefetch, memwait, instreq, pipeready, pcinc, pcdec, spinc, spdec, spwe, pcwe, regwe, stalldispatchexec, stalldispatchmem, addrsel, datasel, requestdbus, dbusreqdir, dbusdir, dbusreq, pamux_ext, pbmux_ext, newmicrocode, qempty, incpcfetch, breset, feq, fneq, flt, ppas, injectinst, nmilatched, inten, sspwe, pspwe;
 	logic[1:0] immsel, pbmuxs, funcsel, wbmuxsel, pccond, ppbs, pamuxs;
 	logic[2:0] intlatched;
 	logic[3:0] regtowriteo;
@@ -143,12 +143,12 @@ module processor_core(input logic clk, input logic reset, input logic nmi, input
 
 	//Pipeline forwarding
 	always_comb
-		if (insout[3:0] == regtowriteo & regtowriteo != 0 & opcode_pointer < 46 & opcode_pointer > 64)
+		if (insout[3:0] == regtowriteo & regtowriteo != 0 & opcode_pointero < 46 & opcode_pointero > 64)
 			begin
 				aforward = writeback;
 				bforward = outmuxb;
 			end
-		else if (insout[7:4] == regtowriteo & regtowriteo != 0 & opcode_pointer < 46 & opcode_pointer > 64)
+		else if (insout[7:4] == regtowriteo & regtowriteo != 0 & opcode_pointero < 46 & opcode_pointero > 64)
 			begin
 				aforward = outmuxa;
 				bforward = writeback;

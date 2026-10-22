@@ -28,7 +28,7 @@ logic[1:0] buswidth, rresp, b_response_uart, pcstatus;
     mabus cpumabus();
     mabus rammabus();
 
-clk_wiz_0 mcmm_clk (cpuclk,reset,mclk);
+clk_wiz_0 mcmm_clk (cpuclk,mclk);
 
 //System
 processor_core ma10k(cpuclk, reset, nmi, intin, cpumabus.READWAIT,
@@ -52,10 +52,10 @@ instmem instrom(rommabus);
 endmodule
 
 module instmem(mabus.slave MABUS);
-    logic[31:0] rom[64];
+    logic[31:0] rom[512];
     
     initial begin
-        $readmemh("rom.hex",rom);
+        $readmemh("mandel.hex",rom);
     end
     
     always_comb
@@ -69,9 +69,9 @@ module maswitch(mabus.slave MASLAVE0, mabus.master MAMASTER0, mabus.master MAMAS
 
 always_comb
     begin
-        if (MASLAVE0.RADDR < 'h100)
+        if (MASLAVE0.RADDR < 'h1000)
             begin
-                MAMASTER0.RADDR = MASLAVE0.RADDR[8:2];
+                MAMASTER0.RADDR = MASLAVE0.RADDR[10:2];
                 MASLAVE0.RDATA =  MAMASTER0.RDATA;
                 MAMASTER0.READ = MASLAVE0.READ;
                 MASLAVE0.READWAIT = 0;
@@ -82,7 +82,7 @@ always_comb
                 MAMASTER2.RADDR = 0;
                 MAMASTER2.READ = 0;
             end
-        else if (MASLAVE0.RADDR >= 'h100 & MASLAVE0.RADDR <= 'h10F)
+        else if (MASLAVE0.RADDR >= 'hFFF0 & MASLAVE0.RADDR <= 'hFFFF)
             begin
                 MAMASTER0.RADDR = 0;
                 MAMASTER0.READ = 0;
@@ -95,7 +95,7 @@ always_comb
                 MAMASTER2.RADDR = 0;
                 MAMASTER2.READ = 0;
             end
-            else if (MASLAVE0.RADDR >= 'h800 & MASLAVE0.RADDR <= 'hFFF)
+            else if (MASLAVE0.RADDR >= 'h1000 & MASLAVE0.RADDR <= 'h7FFF)
             begin
                 MAMASTER0.RADDR = 0;
                 MAMASTER0.READ = 0;
@@ -121,7 +121,7 @@ always_comb
                 MAMASTER2.READ = 0;
             end
         
-        if (MASLAVE0.WADDR < 'h100)
+        if (MASLAVE0.WADDR < 'h1000)
             begin
                 MAMASTER0.WADDR = MASLAVE0.WADDR;
                 MAMASTER0.WDATA =  MASLAVE0.WDATA;
@@ -135,7 +135,7 @@ always_comb
                 MAMASTER2.WDATA = 0;
                 MAMASTER2.WRITE = 0;
             end
-        else if (MASLAVE0.WADDR >= 32'h100 & MASLAVE0.WADDR <= 32'h10F)
+        else if (MASLAVE0.WADDR >= 32'hFFF0 & MASLAVE0.WADDR <= 32'hFFFF)
             begin
                 MAMASTER0.WADDR = 0;
                 MAMASTER0.WDATA = 0;
@@ -149,7 +149,7 @@ always_comb
                 MAMASTER2.WDATA = 0;
                 MAMASTER2.WRITE = 0;
             end
-         else if (MASLAVE0.WADDR >= 'h800 & MASLAVE0.WADDR <= 'hFFF)
+         else if (MASLAVE0.WADDR >= 'h1000 & MASLAVE0.WADDR <= 'h7FFF)
             begin
                 MAMASTER0.WADDR = 0;
                 MAMASTER0.WDATA = 0;
@@ -252,7 +252,7 @@ always_ff @(posedge clk)
             else if (txstate == IDLE & registers[0] == 0 & MABUS.WRITE != 1)
                 registers[2][1] <= 0;
 	           
-		    clkcounter <= clkcounter + 32'd4123168;
+		    clkcounter <= clkcounter + 32'd131941395;
 		    
 		    //RX full clear
 		    if (MABUS.RADDR == 32'h4)

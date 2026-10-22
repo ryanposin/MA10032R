@@ -60,11 +60,12 @@ endmodule
 
 //Custom ALU implementation
 module alumod (input wire[2:0] s, input wire m, input wire[31:0] a, input wire[31:0] b, output logic[31:0] dout, output logic lt, output logic eq);
-
+logic[31:0] tempsub;
 	always_comb
 		begin
 			//Branching flags
-			if (a < b)
+			tempsub = a + ~b + 1;
+			if (tempsub[31])
 				lt = 1; //If less than
 			else
 				lt = 0;
@@ -128,7 +129,7 @@ always_ff @(posedge clk)
 	begin
 		if (reset)
 			shiftstate <= WAITING;
-		else if (shiften)
+		else if (shiften | shiftstate != WAITING)
 			case (shiftstate)
 				WAITING: if (shiftamt[4] == 'b1)
 						shiftstate <= SHIFT16;
@@ -282,8 +283,8 @@ module multiplier_unit (input wire clk, input wire reset, input wire[31:0] a, in
 			multinb = muxbs[1] ? (muxbs[0] ? b[31:24] : b[23:16]) : (muxbs[0] ? b[15:8] : b[7:0]); 
 		end
 
-	assign multtempout = multina * multinb; //Multiply
-	
+	always_comb multtempout = multina * multinb;
+	       
 	//Demux multiplier to 64 bit register
 	always_comb
 		case (demuxs)
@@ -364,6 +365,8 @@ module busunit(input logic clk, input logic reset, input logic instreq, input lo
                                                 rxstate <= RECIEVE_DATA;
                                              else if (instreq)
                                                 rxstate <= RECIEVE_INST;
+                                             else
+                                                rxstate <= RECIEVE_IDLE;
                                           end
                                                 
                             RECIEVE_DATA_DONE: if (memreq & ~memreqdir)
@@ -424,7 +427,7 @@ module busunit(input logic clk, input logic reset, input logic instreq, input lo
                                           end
                             RECIEVE_INST: begin
                                             toprefetch = membusi;
-                                            incpc = 1;
+                                            incpc = instreq;
                                             datareq = 1;
                                             readmembuswidth = 2;
                                             readaddr = programcounter;
@@ -479,10 +482,9 @@ logic[31:0] qpc[6];
 	       if (reset)
 	           begin
 	               prefetchstate <= IDLE;
-	               qfull <= 0;
-	               qpos <= {3'b111, 3'b111, 3'b111, 3'b111, 3'b111, 3'b111};
-	               queue <= {32'b0, 32'b0, 32'b0, 32'b0, 32'b0, 32'b0};
-	               qpc <= {32'b0, 32'b0, 32'b0, 32'b0, 32'b0, 32'b0};
+	               qpos <= '{3'b111, 3'b111, 3'b111, 3'b111, 3'b111, 3'b111};
+	               queue <= '{32'b0, 32'b0, 32'b0, 32'b0, 32'b0, 32'b0};
+	               qpc <= '{32'b0, 32'b0, 32'b0, 32'b0, 32'b0, 32'b0};
 	               qstatus <= 0;
 	               tofetch <= 0;
 	           end
@@ -683,6 +685,11 @@ logic[31:0] qpc[6];
 	   
 	   always_comb
 	       begin
+	           if (qstatus >= 5)
+	               qfull = 1;
+	           else
+	               qfull = 0;
+	               
 	           if (qpos[5] == 3'b111 & qpos[4] == 3'b111 & qpos[3] == 3'b111 & qpos[2] == 3'b111 & qpos[1] == 3'b111 & qpos[0] == 3'b111)
 	               stallpipe = 1;
 	           else
@@ -981,6 +988,7 @@ module execute_unit(input logic clk, input logic reset, input logic newmicrocode
 				shiftdir = 0;
 				signextend = 0;
 				rotate = 0;
+				highlow = 0;
 			end
 			2'b01: begin
 				execout = multout;
@@ -996,6 +1004,7 @@ module execute_unit(input logic clk, input logic reset, input logic newmicrocode
 				shiftdir = 0;
 				signextend = 0;
 				rotate = 0;
+				highlow = microcode_line[30];
 			end
 			2'b10: begin
 				case (pointer)
@@ -1041,6 +1050,7 @@ module execute_unit(input logic clk, input logic reset, input logic newmicrocode
 				alufunc = 0;
 				alufunctype = 0;
 				multreset = 0;
+				highlow = 0;
 			end
 			default: begin
 				execout = 0;
@@ -1056,6 +1066,7 @@ module execute_unit(input logic clk, input logic reset, input logic newmicrocode
 				shiftdir = 0;
 				signextend = 0;
 				rotate = 0;
+				highlow = 0;
 				end
 		endcase
 
