@@ -2,24 +2,24 @@
 //Outputs: validaddr, validdata, read, write, buswidth[1:0] (0 = 8 bit, 1 = 16 bit, 2 = 32 bit)
 //Bidirectional: adbus[31:0]
 
-module processor_core(input logic clk, input logic reset, input logic nmi, input logic[2:0] intin, input logic readwait,
+module processor_core(input logic clk, input logic reset, input logic nonmi, input logic[2:0] intin, input logic readwait,
 								output logic intack,
                                 output logic[31:0] membuso, input logic[31:0] membusi,
                                 output logic[31:0] writeaddr, readaddr,
                                 output logic datareq, output logic datasend, output logic[1:0] membuswidth, output logic[1:0] readmembuswidth);
 
-	logic instreqfetch, prefetchstallpipe, addinst, prefetchwait, mode, ucodereset, memfinished, pspreset, noteq, pccondout, rawpcwe, lt, eq, condpc, internalreset, qfull, memreq, memreqdir, incprefetch, memwait, instreq, pipeready, pcinc, pcdec, spinc, spdec, spwe, pcwe, regwe, stalldispatchexec, stalldispatchmem, addrsel, datasel, requestdbus, dbusreqdir, dbusdir, dbusreq, pamux_ext, pbmux_ext, newmicrocode, qempty, incpcfetch, breset, feq, fneq, flt, ppas, injectinst, nmilatched, inten, sspwe, pspwe;
-	logic[1:0] immsel, pbmuxs, funcsel, wbmuxsel, pccond, ppbs, pamuxs;
+	logic perftimersel, instreqfetch, prefetchstallpipe, addinst, prefetchwait, mode, ucodereset, memfinished, pspreset, noteq, pccondout, rawpcwe, lt, eq, condpc, internalreset, qfull, memreq, memreqdir, incprefetch, memwait, instreq, pipeready, pcinc, pcdec, pspinc, pspdec, sspinc, sspdec, spwe, pcwe, regwe, stalldispatchexec, stalldispatchmem, addrsel, datasel, requestdbus, dbusreqdir, dbusdir, dbusreq, pamux_ext, pbmux_ext, newmicrocode, qempty, incpcfetch, breset, feq, fneq, flt, ppas, injectinst, nmilatched, inten, sspwe, pspwe;
+	logic[1:0] immsel, pbmuxs, funcsel, wbmuxsel, pccond, ppbs, pamuxs, perfsel;
 	logic[2:0] intlatched;
 	logic[3:0] regtowriteo;
 	logic[4:0] executec;
 	logic[6:0] opcode_pointer, opcode_pointero, injectpointer;
 	logic[15:0] immediate;
-	logic[48:0] icodeo, icode;
+	logic[49:0] icodeo, icode;
 	logic[31:0] immediate32, memaddr, programcounter, toprefetch, tofetch, insout, writeback, programstackpointer, supervisorstackpointer, rega, regb, immsignextend, currentsp, outmuxa, outmuxb, ao, bo, execout, memout, pipea, pipeb, pcchain, programcounterinst, programcountero;
 	logic[31:0] memdatao, memdataexec, memdatatemp;
 	logic[31:0] memdatai;
-	logic[31:0] tempimm, aforward, bforward, intaddr;
+	logic[31:0] tempimm, aforward, bforward, intaddr, stallcounter, instructioncount, cyclecount, perfout, pipeaout;
 	logic[1:0] buswidth;
 	microcode_rom microcode2({1'b0, opcode_pointer}, icode);
 	//logic validaddr, validdata, read, write;
@@ -37,8 +37,10 @@ module processor_core(input logic clk, input logic reset, input logic nmi, input
 			regwe = stalldispatchmem ? 0 : icodeo[0];
 			pcinc = incpcfetch; //(icodeo[1] & pipeready & incpcfetch);
 			pcdec = icodeo[2];
-			spinc = icodeo[3];
-			spdec = icodeo[4];
+			pspinc = mode ? icodeo[3] : 1'b0;
+			sspinc = mode ? 1'b0 : icodeo[3];
+			pspdec = mode ? icodeo[4] : 1'b0;
+			sspdec = mode ? 1'b0 : icodeo[4];
 			//spwe = icodeo[5];
 			pspwe = mode ?  icodeo[5] : 1'b0;
 			sspwe = mode ? 1'b0 : icodeo[5];
@@ -60,12 +62,17 @@ module processor_core(input logic clk, input logic reset, input logic nmi, input
 			ppbs = icodeo[44:43];
 			buswidth = icodeo[46:45];
 			intack = icodeo[47];
+			perftimersel = icodeo[49];
 			pcwe = condpc ? pccondout : rawpcwe;
 			internalreset = ~reset | ucodereset;
 			noteq = ~eq;
 			pipeready = ~(stalldispatchmem | stalldispatchexec | prefetchstallpipe);
 			newmicrocode = icodeo[32];
 			
+			if (opcode_pointero == injectpointer & injectinst)
+			 intack = 1;
+			else
+			 intack = 0;
 
 			/*if (opcode_pointero >= 46 & opcode_pointero <= 59)
 				breset = 1;
@@ -117,8 +124,26 @@ module processor_core(input logic clk, input logic reset, input logic nmi, input
 	//Input: clk, reset, increment, decrement, write enable, d
 	//Output: q
 	ma10k_special_reg pc(clk, internalreset, pcinc, pcdec, pcwe, writeback, programcounter);
-	ma10k_special_reg psp(clk, internalreset | pspreset, spinc, spdec, pspwe, writeback, programstackpointer);
-	ma10k_special_reg ssp(clk, internalreset, spinc, spdec, sspwe, writeback, supervisorstackpointer);
+	ma10k_special_reg psp(clk, internalreset | pspreset, pspinc, pspdec, pspwe, writeback, programstackpointer);
+	ma10k_special_reg ssp(clk, internalreset, sspinc, sspdec, sspwe, writeback, supervisorstackpointer);
+	
+
+	always_ff @(posedge clk)
+	   if (internalreset | cyclecount == 32'd4294967295)
+	       begin
+	           cyclecount <= 0;
+	           stallcounter <= 0;
+	           instructioncount <= 0;
+	       end
+	   else
+	       begin
+	           if (~pipeready)
+	               stallcounter <= stallcounter + 1;
+	           if (pipeready)
+	               instructioncount <= instructioncount + 1;
+	           cyclecount <= cyclecount + 32'b1;
+	       end
+	   
 	
 	always_comb currentsp = mode ? programstackpointer : supervisorstackpointer;
 	
@@ -127,7 +152,7 @@ module processor_core(input logic clk, input logic reset, input logic nmi, input
 	ma10k_frontend decoder(insout,
 									immediate, opcode_pointer);
 	
-	interruptprivilage intprivarbiter(insout[19:12], intin, nmi, mode, inten,
+	interruptprivilage intprivarbiter(insout[19:12], intin, nonmi, mode, inten,
 				injectinst, injectpointer);
 
 	//Input: clk, reset, portasel, portbsel, writesel, writeenable, writeinput[31:0]
@@ -161,17 +186,20 @@ module processor_core(input logic clk, input logic reset, input logic nmi, input
 
 	//Inputs: clk, reset, stall, icode[18], a, b, regtowrite
 	//Outputs: icodefunc, afunc, bfunc, regtowritefunc
-	pipebreak pipestage01(clk, internalreset | pcwe, ~pipeready | pcwe, (injectinst ? injectpointer : opcode_pointer), aforward, bforward, insout[11:8], programcounterinst, intin, nmi,
+	pipebreak pipestage01(clk, internalreset | pcwe, ~pipeready | pcwe, (injectinst ? injectpointer : opcode_pointer), aforward, bforward, insout[11:8], programcounterinst, intin, nonmi,
 															opcode_pointero, ao, bo, regtowriteo, programcountero, intlatched, nmilatched);
 	
 	//Grab PC or port A
 	ttb2inmux postpipea(ao, programcountero, ppas, pipea);
+	
+	ttb4inmux perfmux(stallcounter, instructioncount, cyclecount, 0, bo[1:0], perfout);
+	ttb2inmux postpipeperf(pipea, perfout, perftimersel, pipeaout);
 	//Grab port B or latched immediate
 	assign intaddr = nmilatched ? 32'hFFFF_FFE0 : (intlatched[2] ? (intlatched[1] ? (intlatched[0] ? 32'hFFFF_FFFC : 32'hFFFF_FFF8 ) : (intlatched[0] ? 32'hFFFF_FFF4 : 32'hFFFF_FFF0 )) : (intlatched[1] ? (intlatched[0] ? 32'hFFFF_FFEC: 32'hFFFF_FFE8 ) : (intlatched[0] ? 32'hFFFF_FFE4 : 32'hFFFF_FFE0 )));
 	ttb4inmux postpipeb(bo, tempimm, intaddr, 32'hFFFF_FFDC, ppbs, pipeb);
 	//Inputs: clk, reset, funcsel, ina, inb, pointer[6:0]
 //Outputs: execout, stalldispatch, lt, eq, executec, fucode
-	execute_unit exec(clk, internalreset, newmicrocode, funcsel, pipea, pipeb, opcode_pointero, stalldispatchmem,
+	execute_unit exec(clk, internalreset, newmicrocode, funcsel, pipeaout, pipeb, opcode_pointero, stalldispatchmem,
 														execout, stalldispatchexec, lt, eq, executec, icodeo);
 														
 	//Inputs: fromexecute, portb, addrsel, datasel, requestdbus, dbusreqdir, buswait, memfinished

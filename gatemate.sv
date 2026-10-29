@@ -8,17 +8,16 @@ interface mabus();
 endinterface
     
 
-module cpu_wrapper (input logic mclk, input logic reset, input logic rx, output logic tx);
+module cpu_wrapper (input logic mclk, input logic reset, input logic[2:0] intin, input logic nonmi, output logic intack, input logic rx, output logic tx);
 
 logic cpuclk, uartclk,c2,locked, fbclk;
 
 logic ar_ready, r_ready, aw_ready, w_ready, b_ready, r_valid, aw_valid, w_valid, b_valid;
 logic[1:0] clkstate, b_response;
-logic[2:0] intin;
 logic[7:0] uartdata;
 logic[3:0] r_width, w_width;
 logic[31:0] ar_addr, r_data, aw_addr, w_data, r_data_uart, ar_addr_uart, aw_addr_uart, w_data_uart;
-logic uartcs,nmi,intack, aw_valid_uart, w_valid_uart,
+logic uartcs, aw_valid_uart, w_valid_uart,
             ar_valid_uart, r_ready_uart, aw_ready_uart, w_ready_uart, ar_ready_uart, r_valid_uart,
             b_valid_uart, b_ready_uart,pcasserted,resetout;
 logic[1:0] buswidth, rresp, b_response_uart, pcstatus;
@@ -27,11 +26,12 @@ logic[1:0] buswidth, rresp, b_response_uart, pcstatus;
     mabus rommabus();
     mabus cpumabus();
     mabus rammabus();
-
+    mabus vectormabus();
+    
 clk_wiz_0 mcmm_clk (cpuclk,mclk);
 
 //System
-processor_core ma10k(cpuclk, reset, nmi, intin, cpumabus.READWAIT,
+processor_core ma10k(cpuclk, reset, nonmi, intin, cpumabus.READWAIT,
 			intack,
 			cpumabus.WDATA, cpumabus.RDATA,
 			cpumabus.WADDR, cpumabus.RADDR,
@@ -41,21 +41,23 @@ maswitch mabusswitch(
 cpumabus,
 rommabus,
 uartmabus,
-rammabus);
+rammabus,
+vectormabus);
 
 uartmod uart (cpuclk, ~reset, uartmabus, rx, tx);
 
 rammod ram(cpuclk, rammabus);
+vectors vector(cpuclk, vectormabus);
 
 instmem instrom(rommabus);
 
 endmodule
 
 module instmem(mabus.slave MABUS);
-    logic[31:0] rom[512];
+    logic[31:0] rom[2048];
     
     initial begin
-        $readmemh("mandel.hex",rom);
+        $readmemh("monitor.hex",rom);
     end
     
     always_comb
@@ -65,13 +67,13 @@ module instmem(mabus.slave MABUS);
             MABUS.RDATA = 0;
 endmodule
 
-module maswitch(mabus.slave MASLAVE0, mabus.master MAMASTER0, mabus.master MAMASTER1, mabus.master MAMASTER2);
+module maswitch(mabus.slave MASLAVE0, mabus.master MAMASTER0, mabus.master MAMASTER1, mabus.master MAMASTER2, mabus.master MAMASTER3);
 
 always_comb
     begin
-        if (MASLAVE0.RADDR < 'h1000)
+        if (MASLAVE0.RADDR < 'h4000)
             begin
-                MAMASTER0.RADDR = MASLAVE0.RADDR[10:2];
+                MAMASTER0.RADDR = MASLAVE0.RADDR[13:2];
                 MASLAVE0.RDATA =  MAMASTER0.RDATA;
                 MAMASTER0.READ = MASLAVE0.READ;
                 MASLAVE0.READWAIT = 0;
@@ -81,6 +83,9 @@ always_comb
                 
                 MAMASTER2.RADDR = 0;
                 MAMASTER2.READ = 0;
+                
+                MAMASTER3.RADDR = 0;
+                MAMASTER3.READ = 0;
             end
         else if (MASLAVE0.RADDR >= 'hFFF0 & MASLAVE0.RADDR <= 'hFFFF)
             begin
@@ -94,8 +99,11 @@ always_comb
                 
                 MAMASTER2.RADDR = 0;
                 MAMASTER2.READ = 0;
+                
+                MAMASTER3.RADDR = 0;
+                MAMASTER3.READ = 0;
             end
-            else if (MASLAVE0.RADDR >= 'h1000 & MASLAVE0.RADDR <= 'h7FFF)
+            else if (MASLAVE0.RADDR >= 'h4000 & MASLAVE0.RADDR <= 'h7FFF)
             begin
                 MAMASTER0.RADDR = 0;
                 MAMASTER0.READ = 0;
@@ -104,9 +112,29 @@ always_comb
                 MAMASTER1.READ = 0;
                 MASLAVE0.READWAIT = MAMASTER2.READWAIT;
                 
-                MAMASTER2.RADDR = MASLAVE0.RADDR[11:2];
+                MAMASTER2.RADDR = MASLAVE0.RADDR[13:2];
                 MASLAVE0.RDATA =  MAMASTER2.RDATA;
                 MAMASTER2.READ = MASLAVE0.READ;
+                
+                MAMASTER3.RADDR = 0;
+                MAMASTER3.READ = 0;
+            end
+            else if (MASLAVE0.RADDR >= 'hFFFFFFE0 & MASLAVE0.RADDR <= 'hFFFFFFFF)
+            begin
+                MAMASTER0.RADDR = 0;
+                MAMASTER0.READ = 0;
+                
+                MAMASTER1.RADDR = 0;
+                MAMASTER1.READ = 0;
+                
+                MAMASTER2.RADDR = 0;
+                MAMASTER2.READ = 0;
+                
+                MASLAVE0.READWAIT = MAMASTER3.READWAIT;
+                
+                MAMASTER3.RADDR = MASLAVE0.RADDR[11:2];
+                MASLAVE0.RDATA =  MAMASTER3.RDATA;
+                MAMASTER3.READ = MASLAVE0.READ;
             end
         else
             begin
@@ -119,9 +147,12 @@ always_comb
                 MAMASTER2.RADDR = 0;
                 MASLAVE0.RDATA =  0;
                 MAMASTER2.READ = 0;
+                
+                MAMASTER3.RADDR = 0;
+                MAMASTER3.READ = 0;
             end
         
-        if (MASLAVE0.WADDR < 'h1000)
+        if (MASLAVE0.WADDR < 'h4000)
             begin
                 MAMASTER0.WADDR = MASLAVE0.WADDR;
                 MAMASTER0.WDATA =  MASLAVE0.WDATA;
@@ -134,6 +165,10 @@ always_comb
                 MAMASTER2.WADDR = 0;
                 MAMASTER2.WDATA = 0;
                 MAMASTER2.WRITE = 0;
+                
+                MAMASTER3.WADDR = 0;
+                MAMASTER3.WDATA = 0;
+                MAMASTER3.WRITE = 0;
             end
         else if (MASLAVE0.WADDR >= 32'hFFF0 & MASLAVE0.WADDR <= 32'hFFFF)
             begin
@@ -148,8 +183,12 @@ always_comb
                 MAMASTER2.WADDR = 0;
                 MAMASTER2.WDATA = 0;
                 MAMASTER2.WRITE = 0;
+                
+                MAMASTER3.WADDR = 0;
+                MAMASTER3.WDATA = 0;
+                MAMASTER3.WRITE = 0;
             end
-         else if (MASLAVE0.WADDR >= 'h1000 & MASLAVE0.WADDR <= 'h7FFF)
+         else if (MASLAVE0.WADDR >= 'h4000 & MASLAVE0.WADDR <= 'h7FFF)
             begin
                 MAMASTER0.WADDR = 0;
                 MAMASTER0.WDATA = 0;
@@ -159,9 +198,31 @@ always_comb
                 MAMASTER1.WDATA = 0;
                 MAMASTER1.WRITE = 0;
                 
-                MAMASTER2.WADDR = MASLAVE0.WADDR[11:2];
+                MAMASTER2.WADDR = MASLAVE0.WADDR[13:2];
                 MAMASTER2.WDATA =  MASLAVE0.WDATA;
                 MAMASTER2.WRITE = MASLAVE0.WRITE;
+                
+                MAMASTER3.WADDR = 0;
+                MAMASTER3.WDATA = 0;
+                MAMASTER3.WRITE = 0;
+            end
+          else if (MASLAVE0.WADDR >= 'hFFFFFFE0 & MASLAVE0.WADDR <= 'hFFFFFFFF)
+            begin
+                MAMASTER0.WADDR = 0;
+                MAMASTER0.WDATA = 0;
+                MAMASTER0.WRITE = 0;
+                
+                MAMASTER1.WADDR = 0;
+                MAMASTER1.WDATA = 0;
+                MAMASTER1.WRITE = 0;
+                
+                MAMASTER2.WADDR = 0;
+                MAMASTER2.WDATA = 0;
+                MAMASTER2.WRITE = 0;
+                
+                MAMASTER3.WADDR = MASLAVE0.WADDR[11:2];
+                MAMASTER3.WDATA =  MASLAVE0.WDATA;
+                MAMASTER3.WRITE = MASLAVE0.WRITE;
             end
         else
             begin
@@ -176,13 +237,41 @@ always_comb
                 MAMASTER2.WADDR = 0;
                 MAMASTER2.WDATA =  0;
                 MAMASTER2.WRITE = 0;
+                
+                MAMASTER3.WADDR = 0;
+                MAMASTER3.WDATA = 0;
+                MAMASTER3.WRITE = 0;
             end
     end
 
 endmodule
 
 module rammod(input clk, mabus.slave MABUS);
-(* ram_style = "block" *) logic[31:0] ram[2047:0];
+(* ram_style = "block" *) logic[31:0] ram[4096];
+logic readdone;
+    always_ff @(posedge clk)
+        begin
+        if (MABUS.WRITE)
+            ram[MABUS.WADDR] <= MABUS.WDATA;
+       
+        if (MABUS.READ)
+            begin
+                MABUS.RDATA <= ram[MABUS.RADDR];
+                readdone <= 1;
+            end
+            else
+                readdone <= 0;
+        end
+        
+        always_comb
+            if (MABUS.READ & ~readdone)
+                MABUS.READWAIT = 1;
+            else
+                MABUS.READWAIT = 0;
+endmodule
+
+module vectors(input clk, mabus.slave MABUS);
+(* ram_style = "block" *) logic[31:0] ram[8];
 logic readdone;
     always_ff @(posedge clk)
         begin
@@ -217,7 +306,7 @@ logic[31:0] clkcounter;
 logic rxstate;
 logic[2:0] txstate;
 logic[3:0] rxcount, txcount;
-
+logic[3:0] oversamplediv;
 localparam IDLE = 0;
 localparam DATAIN = 1;
 
@@ -263,16 +352,42 @@ always_ff @(posedge clk)
 		    
 		end
 
+always_ff @(posedge clkcounter[27] or posedge reset) //Recieve at x16 oversampling
+    if (reset)
+        begin
+            rxstate <= IDLE;
+            rxcount <= 0;
+            registers[1] <= 8'b0;
+        end
+     else
+        begin
+             case (rxstate)
+                IDLE: if (rx == 0)
+                    begin
+                        rxstate <= DATAIN;
+                        registers[1] <= 0;
+                        oversamplediv <= 0;
+                    end
+                DATAIN: begin
+                          oversamplediv <= oversamplediv + 1;
+                          if (oversamplediv == 15)
+                            begin
+                                registers[1][rxcount] <= rx;
+                                if (rxcount == 7)
+                                    rxstate <= IDLE;
+                                else
+                                    rxcount <= rxcount + 1;
+                            end
+                        end
+            endcase
+        end
 
 always_ff @(posedge clkcounter[31] or posedge reset)
     if (reset)
         begin
             txstate <= IDLE;
-            rxstate <= IDLE;
             //registers[1] = 8'b0;
             txcount <= 0;
-            rxcount <= 0;
-            registers[1] <= 8'b0;
         end
     else
         begin
@@ -289,21 +404,6 @@ always_ff @(posedge clkcounter[31] or posedge reset)
                         txcount <= 0;
                       end
             endcase
-        
-            /*case (rxstate)
-                IDLE: if (rx == 0)
-                    begin
-                        rxstate <= DATAIN;
-                        registers[1] <= 0;
-                    end
-                DATAIN: begin
-                            registers[1][rxcount] <= rx;
-                            if (rxcount == 7)
-                                rxstate <= IDLE;
-                            else
-                                rxcount <= rxcount + 1;
-                        end
-            endcase*/
         end
         
 

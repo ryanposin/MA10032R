@@ -776,8 +776,8 @@ endmodule
 //Microcode
 //Inputs: Pointer
 //Outputs: Microcode
-module microcode_rom(input logic[7:0] pointer, output logic[48:0] microcode_line);
-    logic[48:0] microcode[112];
+module microcode_rom(input logic[7:0] pointer, output logic[49:0] microcode_line);
+    logic[49:0] microcode[114];
     assign microcode_line = microcode[pointer];
     initial begin
         $readmemh("microcode.hex", microcode);
@@ -911,21 +911,22 @@ module ma10k_frontend(input logic[31:0] instruction, output logic[15:0] immediat
 			LREL: opcode_pointer = 77;
 			SREL: opcode_pointer = 78;
 			PUSH: opcode_pointer = 79;
-			POP: opcode_pointer = 81;
-			STQW: opcode_pointer = 83;
-			LDQW: opcode_pointer = 84;
-			STHW: opcode_pointer = 85;
-			LDHW: opcode_pointer = 86;
-			PRG: opcode_pointer = 87;
-			RESPSP: opcode_pointer = 90;
-			SPSP:	opcode_pointer = 91;
-			GPSP:	opcode_pointer = 92;
-			SCOP: opcode_pointer = 93;
-			GCOP: opcode_pointer = 94;
-			EI: opcode_pointer = 95;
-			DI: opcode_pointer = 96;
-			GPTIMER: opcode_pointer = 97;
-			RESET: opcode_pointer = 98;
+			POP: opcode_pointer = 82;
+			STQW: opcode_pointer = 85;
+			LDQW: opcode_pointer = 86;
+			STHW: opcode_pointer = 87;
+			LDHW: opcode_pointer = 88;
+			PRG: opcode_pointer = 89;
+			RESPSP: opcode_pointer = 92;
+			SPSP:	opcode_pointer = 93;
+			GPSP:	opcode_pointer = 94;
+			SCOP: opcode_pointer = 95;
+			GCOP: opcode_pointer = 96;
+			EI: opcode_pointer = 97;
+			DI: opcode_pointer = 98;
+			GPTIMER: opcode_pointer = 99;
+			RESET: opcode_pointer = 100;
+			RETI: opcode_pointer = 108;
 			default: opcode_pointer = 0;
 		endcase
 endmodule
@@ -933,7 +934,7 @@ endmodule
 //Pipeline break
 //Inputs: clk, reset, stall, icode[18], a, b, regtowrite
 //Outputs: icodefunc, afunc, bfunc, regtowritefunc
-module pipebreak(input logic clk, input logic reset, input logic stall, input logic[6:0] icode_pointer, input logic[31:0] a, input logic[31:0] b, input logic[3:0] regtowrite, input logic[31:0] programcounterinst, input logic[2:0] intin, input logic nmi, output logic[6:0] icode_pointero, output logic[31:0] afunc, output logic[31:0] bfunc, output logic[3:0] regtowritefunc, output logic[31:0] programcountero, output logic[2:0] intout, output logic nmiout);
+module pipebreak(input logic clk, input logic reset, input logic stall, input logic[6:0] icode_pointer, input logic[31:0] a, input logic[31:0] b, input logic[3:0] regtowrite, input logic[31:0] programcounterinst, input logic[2:0] intin, input logic nonmi, output logic[6:0] icode_pointero, output logic[31:0] afunc, output logic[31:0] bfunc, output logic[3:0] regtowritefunc, output logic[31:0] programcountero, output logic[2:0] intout, output logic nmiout);
 	always_ff @(posedge clk)
 		begin
 			if (reset)
@@ -941,7 +942,7 @@ module pipebreak(input logic clk, input logic reset, input logic stall, input lo
 			else
 				if (~stall)
 					begin
-						{afunc, bfunc, regtowritefunc, programcountero, intout, nmiout} <= {a, b, regtowrite, programcounterinst, intin, nmi};
+						{afunc, bfunc, regtowritefunc, programcountero, intout, nmiout} <= {a, b, regtowrite, programcounterinst, intin, nonmi};
 						icode_pointero <= icode_pointer;
 					end
 		end
@@ -951,8 +952,8 @@ endmodule
 //Inputs: clk, reset, funcsel, ina, inb, pointer[6:0]
 //Outputs: execout, stalldispatch, lt, eq, executec, fucode
 module execute_unit(input logic clk, input logic reset, input logic newmicrocode, input logic[1:0] funcsel, input logic[31:0] ina, input logic[31:0] inb, input logic[6:0] pointer, input logic memaccess,
-							output logic[31:0] execout, output logic stalldispatch, output logic lt, output logic eq, output logic[4:0] executec, output logic[48:0] fucode);
-	logic[48:0] microcode_line;
+							output logic[31:0] execout, output logic stalldispatch, output logic lt, output logic eq, output logic[4:0] executec, output logic[49:0] fucode);
+	logic[49:0] microcode_line;
 	logic[31:0] aluout, shiftout, multout;
 	logic shiftdone, shiften, alufunctype, highlow, accumulate, shiftstalldispatch, multreset, shiftdir, rotate, signextend;
 	logic[1:0] multmuxas, multmuxbs;
@@ -1103,7 +1104,7 @@ module mem_access_unit(input logic[31:0] fromexecute, input logic[31:0] portb, i
 	/* verilator lint_on ALWCOMBORDER */
 endmodule
 
-module interruptprivilage(input logic[7:0] currentfunc, input logic[2:0] intin, input logic nmi, input logic mode, input logic inten,
+module interruptprivilage(input logic[7:0] currentfunc, input logic[2:0] intin, input logic nonmi, input logic mode, input logic inten,
 			output logic injectinst, output logic[6:0] injectpointer);
 
 	localparam SUP = 8'h0F;
@@ -1126,7 +1127,7 @@ module interruptprivilage(input logic[7:0] currentfunc, input logic[2:0] intin, 
 			if (mode & currentfunc <= RESET & currentfunc >= PRG) //Program mode
 				begin
 					injectinst = 1;
-					injectpointer = 105;
+					injectpointer = 110;
 				end
 			else if (~mode & currentfunc <= RESET & currentfunc >= PRG) //Supervisor mode
 				begin
@@ -1136,12 +1137,12 @@ module interruptprivilage(input logic[7:0] currentfunc, input logic[2:0] intin, 
 			else if (inten & |intin[2:0])
 				begin
 					injectinst = 1;
-					injectpointer = 95; 
+					injectpointer = 100; 
 				end
-			else if (nmi)
+			else if (nonmi)
 				begin
 					injectinst = 1;
-					injectpointer = 98;
+					injectpointer = 103;
 				end
 			else
 				begin
